@@ -1,7 +1,8 @@
 # ---------------------------
 # Build artifacts (IMPORTANT)
 # ---------------------------
-build/
+build/*
+!build/.gitkeep
 Build/
 build-debug/
 build-release/
