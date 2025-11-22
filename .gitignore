@@ -1,1 +1,51 @@
+# ---------------------------
+# Build artifacts (IMPORTANT)
+# ---------------------------
+build/
+Build/
+build-debug/
+build-release/
+cmake-build-*/
+bin/
+lib/
 
+*.o
+*.obj
+*.out
+*.exe
+*.dll
+*.so
+*.dylib
+
+# ---------------------------
+# CMake generated files
+# ---------------------------
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+Makefile
+CTestTestfile.cmake
+
+# ---------------------------
+# VSCode settings (optional)
+# ---------------------------
+.vscode/
+.vscode/*
+
+# ---------------------------
+# OS-specific junk
+# ---------------------------
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# ---------------------------
+# Editor/IDE junk
+# ---------------------------
+*.swp
+*.swo
+.idea/
+*.iml
+.vs/
+*.sln
+*.vcxproj*
