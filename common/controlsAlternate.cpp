@@ -31,7 +31,7 @@ float initialFoV = 45.0f;
 
 float speed = 3.0f; // 3 units / second
 float mouseSpeed = 0.00005f;
-float radius = 10.0f;
+float radius = 500.0f;
 float theta = 45.0f;
 float phi = 30.0f;
 //float deltaRadius = 0.01f;
@@ -54,8 +54,8 @@ void computeMatricesFromInputs(){
 	// Position and Origin vectors
 	glm::vec3 origin = glm::vec3(0,0,0);
 
-	// Up vector
-	glm::vec3 up = glm::vec3(0,1,0);
+	// Up vector - Z is up for our coordinate system
+	glm::vec3 up = glm::vec3(0,0,1);
 
 
 	// Move forward
@@ -95,14 +95,14 @@ void computeMatricesFromInputs(){
 	phi = glm::clamp(phi, -89.9f, 89.9f);
     if (radius < 1.0f)  radius = 1.0f;
 
-	ProjectionMatrix = glm::perspective(glm::radians(FoV), 4.0f / 3.0f, 0.1f, 100.0f);
+	ProjectionMatrix = glm::perspective(glm::radians(FoV), 4.0f / 3.0f, 0.1f, 1000.0f);
 	
 	float x,y,z;
 
-	// Spherical to Cartesian coordinates
+	// Spherical to Cartesian coordinates (Z-up: x=width, y=length, z=height)
 	position.x = radius * sin(glm::radians(theta)) * cos(glm::radians(phi));
-	position.y = radius * sin(glm::radians(phi));
-	position.z = radius * cos(glm::radians(theta)) * cos(glm::radians(phi));
+	position.y = radius * cos(glm::radians(theta)) * cos(glm::radians(phi));
+	position.z = radius * sin(glm::radians(phi));
 
 	// Camera matrix
 	ViewMatrix = glm::lookAt(

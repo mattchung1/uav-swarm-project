@@ -64,6 +64,15 @@ GLuint loadBMP_custom(const char * imagepath){
 	// Everything is in memory now, the file can be closed.
 	fclose (file);
 
+	// Swap channels: move blue to green (if field appears blue, make it green) 
+	// This is needed because the imported ff.bmp file shows a blue field instead of green. That wouldn't be a real football field!
+	for (unsigned int i = 0; i < imageSize; i += 3) {
+		unsigned char blue = data[i];      // Blue channel
+		unsigned char green = data[i + 1]; // Green channel
+		data[i + 1] = blue;                // Green = Blue
+		data[i] = green;                   // Blue = Green
+	}
+
 	// Create one OpenGL texture
 	GLuint textureID;
 	glGenTextures(1, &textureID);
