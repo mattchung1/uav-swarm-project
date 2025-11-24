@@ -19,6 +19,10 @@ ECE_UAV::ECE_UAV(Vec3 initialPos)
     : position(initialPos), velocity(0, 0, 0), acceleration(0, 0, 0),
           mass(mass), maxForce(maxForce)
 {
+    this -> mass = 1.0; // kg
+    this -> gravityCompensation = 10.0 * mass; // Newtons
+
+    running = false;
     // PID controllers and other initializations can be added here
 
 
@@ -56,6 +60,9 @@ void ECE_UAV::stop()
 // External thread function that updates kinematics every 10 msec
 void threadFunction(ECE_UAV* pUAV)
 {
+    // Print statement for debugging
+    std::cout << "Thread started for UAV!" << std::endl;
+
     const double updateInterval = 0.01; // 10 msec in seconds
     Vec3 controlForce = Vec3(0, 0, 10); // PLACEHOLDER FOR CONTROL FORCE, can be updated externally
 
@@ -65,9 +72,17 @@ void threadFunction(ECE_UAV* pUAV)
     {
         // Update the UAV's kinematic information
         pUAV->updateKinematics(controlForce, updateInterval);
+
+        checkCollisionsFor(pUAV);
         
         // Sleep for 10 milliseconds
         std::this_thread::sleep_for(std::chrono::milliseconds(10));
+
+        // For testing: check for explosion condition
+        Vec3 pos = pUAV->getPosition();
+        if (pos.z > 100 || pos.z < -100) { 
+             std::cout << "EXPLOSION DETECTED! Z: " << pos.z << std::endl;
+        }
     }
 }
 
