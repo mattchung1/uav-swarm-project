@@ -30,6 +30,7 @@ using namespace glm;
 #include <common/vboindexer.hpp>
 #include <vector>
 #include "ECE_UAV.h"
+#include "Vec3.h"
 
 int main( void )
 {
@@ -184,6 +185,8 @@ int main( void )
 
 	// For vector initialization - 15 UAVs for multithreading
 	const int numberUAVs = 15;
+	// Position storage for UAVs (used in render loop)
+	std::vector<Vec3> currentPos(numberUAVs);
 	std::vector<glm::mat4> modelMatrices(numberUAVs);
 	std::vector<glm::mat4> MVPMatrices(numberUAVs);
 
@@ -195,7 +198,8 @@ int main( void )
 		float x = initialRadius * cos(glm::radians(angle));
 		float y = initialRadius * sin(glm::radians(angle));
 		float z = 5.0f; // Start at 5m height
-		uavs.push_back(new ECE_UAV(x, y, z));
+		Vec3 initialPos(x, y, z);
+		uavs.push_back(new ECE_UAV(initialPos));
 	}
 
 	// Start all UAV threads
@@ -327,9 +331,9 @@ int main( void )
 		if (currentTime - lastPollTime >= pollInterval) {
 			// Update positions from UAV threads
 			for (int i = 0; i < numberUAVs; ++i) {
-				double x, y, z;
-				uavs[i]->getPosition(x, y, z);
+				currentPos[i] = uavs[i]->getPosition();
 				// Store positions for rendering (will be used in render loop below)
+				
 			}
 			lastPollTime = currentTime;
 		}
@@ -445,7 +449,11 @@ int main( void )
 		{
 			// Get current position from UAV thread
 			double x, y, z;
-			uavs[object]->getPosition(x, y, z);
+
+			x = currentPos[object].x;
+			y = currentPos[object].y;
+			z = currentPos[object].z;
+			
 
 			// define model matrix and parameters
 			modelMatrices[object] = glm::mat4(1.0);
