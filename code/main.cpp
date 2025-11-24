@@ -90,7 +90,10 @@ int main( void )
 	glBindVertexArray(VertexArrayID);
 
 	// Create and compile our GLSL program from the shaders
-	GLuint programID = LoadShaders( "StandardShading.vertexshader", "StandardShading.fragmentshader" );
+	GLuint programID = LoadShaders(
+		"assets/shaders/StandardShading.vertexshader",
+		"assets/shaders/StandardShading.fragmentshader"
+	);
 
 	// Get a handle for our "MVP" uniform
 	GLuint MatrixID = glGetUniformLocation(programID, "MVP");
@@ -102,10 +105,10 @@ int main( void )
 	GLint uSolidColor = glGetUniformLocation(programID, "solidColor");
 
 	// Load the texture
-	GLuint Texture = loadDDS("uvmap.DDS");
+	GLuint Texture = loadDDS("assets/textures/uvmap.DDS");
 
 	// Load floor texture
-	GLuint floorTexture = loadDDS("cat.DDS");
+	GLuint floorTexture = loadDDS("assets/textures/cat.DDS");
 
 	// Set up texture parameters
 	glBindTexture(GL_TEXTURE_2D, floorTexture);
@@ -130,7 +133,7 @@ int main( void )
 	std::vector<glm::vec3> vertices;
 	std::vector<glm::vec2> uvs;
 	std::vector<glm::vec3> normals;
-	bool res = loadOBJ("suzanne.obj", vertices, uvs, normals);
+	bool res = loadOBJ("assets/models/suzanne.obj", vertices, uvs, normals);
 
 	std::vector<unsigned short> indices;
 	std::vector<glm::vec3> indexed_vertices;
