@@ -47,7 +47,7 @@ int main( void )
 	glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
 
 	// Open a window and create its OpenGL context
-	window = glfwCreateWindow( 1024, 768, "Tutorial 09 - Rendering several models", NULL, NULL);
+	window = glfwCreateWindow( 400, 400, "Tutorial 09 - Rendering several models", NULL, NULL);
 	if( window == NULL ){
 		fprintf( stderr, "Failed to open GLFW window. If you have an Intel GPU, they are not 3.3 compatible. Try the 2.1 version of the tutorials.\n" );
 		getchar();
@@ -82,6 +82,10 @@ int main( void )
 	// Accept fragment if it is closer to the camera than the former one
 	glDepthFunc(GL_LESS); 
 
+	// Enable blending for transparency
+	glEnable(GL_BLEND);
+	glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+
 	// Cull triangles which normal is not towards the camera
 	//glEnable(GL_CULL_FACE);
 
@@ -103,12 +107,13 @@ int main( void )
 	// Get handles for solid color (green floor)
 	GLint uUseSolid   = glGetUniformLocation(programID, "useSolidColor");
 	GLint uSolidColor = glGetUniformLocation(programID, "solidColor");
+	GLint uSolidAlpha = glGetUniformLocation(programID, "solidAlpha");
 
 	// Load the texture
 	GLuint Texture = loadDDS("assets/textures/uvmap.DDS");
 
 	// Load floor texture
-	GLuint floorTexture = loadDDS("assets/textures/cat.DDS");
+	GLuint floorTexture = loadBMP_custom("assets/textures/ff.bmp");
 
 	// Set up texture parameters
 	glBindTexture(GL_TEXTURE_2D, floorTexture);
@@ -184,18 +189,20 @@ int main( void )
 	float normalAngle;
 	float currentAngle = 0.0f;
 	float radNormalAngle;
-	const float s = radius + 1.0f;
+	const float floorWidth = 256.0f;   // Football field width
+	const float floorDepth = 128.0f;   // Football field length (512/2 for half-extents)
 
-	// Create floor and its UVs
+	// Create floor and its UVs (X-Y plane at Z=0 for Z-up coordinate system)
 	GLfloat floorVerts[] = 
 	{
 		// tri 1
-		-s,0,-s,   -s,0, s,    s,0,-s,
+		-floorWidth,-floorDepth,0,   -floorWidth,floorDepth,0,    floorWidth,-floorDepth,0,
 		// tri 2
-		s,0,-s,   -s,0, s,    s,0, s,
+		floorWidth,-floorDepth,0,   -floorWidth,floorDepth,0,    floorWidth,floorDepth,0,
 	};
 	GLfloat floorUVs[] = 
 	{
+		// Flipped back to normal orientation for Z-up coordinate system
 		0.f,0.f,  0.f,1.f,  1.f,0.f,
 		1.f,0.f,  0.f,1.f,  1.f,1.f,
 	};
@@ -210,6 +217,64 @@ int main( void )
 	glGenBuffers(1, &floorUV_VBO);
 	glBindBuffer(GL_ARRAY_BUFFER, floorUV_VBO);
 	glBufferData(GL_ARRAY_BUFFER, sizeof(floorUVs), floorUVs, GL_STATIC_DRAW);
+
+	// Create sphere geometry for target visualization
+	const float sphereRadius = 10.0f;
+	const int sphereStacks = 20;
+	const int sphereSlices = 20;
+	std::vector<glm::vec3> sphereVertices;
+	std::vector<glm::vec3> sphereNormals;
+	std::vector<unsigned short> sphereIndices;
+
+	// Generate sphere vertices
+	for (int i = 0; i <= sphereStacks; ++i) {
+		float V = i / (float)sphereStacks;
+		float phi = V * glm::pi<float>();
+
+		for (int j = 0; j <= sphereSlices; ++j) {
+			float U = j / (float)sphereSlices;
+			float theta = U * 2.0f * glm::pi<float>();
+
+			float x = cos(theta) * sin(phi);
+			float y = cos(phi);
+			float z = sin(theta) * sin(phi);
+
+			sphereVertices.push_back(glm::vec3(x, y, z) * sphereRadius);
+			sphereNormals.push_back(glm::vec3(x, y, z));
+		}
+	}
+
+	// Generate sphere indices
+	for (int i = 0; i < sphereStacks; ++i) {
+		for (int j = 0; j < sphereSlices; ++j) {
+			int first = i * (sphereSlices + 1) + j;
+			int second = first + sphereSlices + 1;
+
+			sphereIndices.push_back(first);
+			sphereIndices.push_back(second);
+			sphereIndices.push_back(first + 1);
+
+			sphereIndices.push_back(second);
+			sphereIndices.push_back(second + 1);
+			sphereIndices.push_back(first + 1);
+		}
+	}
+
+	// Load sphere into VBOs
+	GLuint sphereVertexBuffer;
+	glGenBuffers(1, &sphereVertexBuffer);
+	glBindBuffer(GL_ARRAY_BUFFER, sphereVertexBuffer);
+	glBufferData(GL_ARRAY_BUFFER, sphereVertices.size() * sizeof(glm::vec3), &sphereVertices[0], GL_STATIC_DRAW);
+
+	GLuint sphereNormalBuffer;
+	glGenBuffers(1, &sphereNormalBuffer);
+	glBindBuffer(GL_ARRAY_BUFFER, sphereNormalBuffer);
+	glBufferData(GL_ARRAY_BUFFER, sphereNormals.size() * sizeof(glm::vec3), &sphereNormals[0], GL_STATIC_DRAW);
+
+	GLuint sphereIndexBuffer;
+	glGenBuffers(1, &sphereIndexBuffer);
+	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, sphereIndexBuffer);
+	glBufferData(GL_ELEMENT_ARRAY_BUFFER, sphereIndices.size() * sizeof(unsigned short), &sphereIndices[0], GL_STATIC_DRAW);
 
 	// Enable toggling of direct light
 	GLint uEnableDirectLoc = glGetUniformLocation(programID, "uEnableDirect");
@@ -249,7 +314,7 @@ int main( void )
 		
 		// Use our shader
 		glUseProgram(programID);
-		glm::vec3 lightPos = glm::vec3(7,7,7);
+		glm::vec3 lightPos = glm::vec3(0, 200, 0);  // High overhead light at field center
 		glUniform3f(LightID, lightPos.x, lightPos.y, lightPos.z);
 		glUniformMatrix4fv(ViewMatrixID, 1, GL_FALSE, &ViewMatrix[0][0]); // This one doesn't change between objects, so this can be done once for all objects that use "programID"
 		
@@ -284,13 +349,48 @@ int main( void )
 		// glDisableVertexAttribArray(1);
 		// glVertexAttrib2f(1, 0.5f, 0.5f);
 
-		// Make normals constant up (+Y) for both tris
+		// Make normals constant up (+Z) for both tris
 		glDisableVertexAttribArray(2);
-		glVertexAttrib3f(2, 0.0f, 1.0f, 0.0f);
+		glVertexAttrib3f(2, 0.0f, 0.0f, 1.0f);
 
 		glDrawArrays(GL_TRIANGLES, 0, 6);
 
 		/////// End of Green Floor ////////
+
+
+		/////// Draw Semi-Transparent Target Sphere ////////
+		// Position: (0, 0, 50) in Z-up coordinate system
+		glm::mat4 sphereModelMatrix = glm::mat4(1.0);
+		sphereModelMatrix = glm::translate(sphereModelMatrix, glm::vec3(0.0f, 0.0f, 50.0f));
+		glm::mat4 sphereMVP = ProjectionMatrix * ViewMatrix * sphereModelMatrix;
+
+		// Use solid color for sphere (semi-transparent cyan/blue)
+		glUniform1i(uUseSolid, GL_TRUE);
+		glUniform3f(uSolidColor, 0.3f, 0.7f, 1.0f);
+		glUniform1f(uSolidAlpha, 0.3f);  // 30% opacity for transparency
+
+		glUniformMatrix4fv(MatrixID, 1, GL_FALSE, &sphereMVP[0][0]);
+		glUniformMatrix4fv(ModelMatrixID, 1, GL_FALSE, &sphereModelMatrix[0][0]);
+
+		// Draw sphere
+		glEnableVertexAttribArray(0);
+		glBindBuffer(GL_ARRAY_BUFFER, sphereVertexBuffer);
+		glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 0, (void*)0);
+
+		glDisableVertexAttribArray(1);
+		glVertexAttrib2f(1, 0.5f, 0.5f);
+
+		glEnableVertexAttribArray(2);
+		glBindBuffer(GL_ARRAY_BUFFER, sphereNormalBuffer);
+		glVertexAttribPointer(2, 3, GL_FLOAT, GL_FALSE, 0, (void*)0);
+
+		glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, sphereIndexBuffer);
+		glDrawElements(GL_TRIANGLES, sphereIndices.size(), GL_UNSIGNED_SHORT, (void*)0);
+
+		// Reset alpha to opaque for other objects
+		glUniform1f(uSolidAlpha, 1.0f);
+
+		/////// End of Target Sphere ////////
 
 
 		/////// NEW MATRIX TO RENDER ALL OBJECTS ////////
