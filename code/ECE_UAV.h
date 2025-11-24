@@ -9,6 +9,7 @@ Header file for ECE_UAV class
 #include <atomic>
 #include <mutex>
 #include "Vec3.h"
+#include "PhysicsGlobals.h"
 
 class ECE_UAV 
 {
@@ -19,13 +20,13 @@ class ECE_UAV
         Vec3 acceleration;
         
         // Mass of UAV (1 kg)
-        double mass = 1.0; // kg
+        double mass; // kg
 
         // Max force the UAV can exert
         double maxForce = 20.0; // Newtons
 
         // Gravity compensation force
-        double gravityCompensation = 10.0 * mass;
+        double gravityCompensation;
 
         // Control parameters
         Vec3 controlForce;
@@ -35,7 +36,7 @@ class ECE_UAV
         
         // Flag to control thread execution
         std::atomic<bool> running;
-        
+
         // Mutex for thread-safe access to kinematic data
         mutable std::mutex dataMutex;
 
@@ -82,6 +83,8 @@ class ECE_UAV
         
         // Friend function declaration
         friend void threadFunction(ECE_UAV* pUAV);
+
+        friend void checkCollisionsFor(ECE_UAV* me);
 
         /*
         **************************

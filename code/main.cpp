@@ -31,6 +31,7 @@ using namespace glm;
 #include <vector>
 #include "ECE_UAV.h"
 #include "Vec3.h"
+#include "PhysicsGlobals.h"
 
 int main( void )
 {
@@ -185,13 +186,13 @@ int main( void )
 
 	// For vector initialization - 15 UAVs for multithreading
 	const int numberUAVs = 15;
-	// Position storage for UAVs (used in render loop)
-	std::vector<Vec3> currentPos(numberUAVs);
 	std::vector<glm::mat4> modelMatrices(numberUAVs);
 	std::vector<glm::mat4> MVPMatrices(numberUAVs);
 
 	// Create 15 ECE_UAV objects with initial positions in a circle
 	std::vector<ECE_UAV*> uavs;
+	// Set the global UAV list pointer for collision detection
+	GLOBAL_UAV_LIST = &uavs;
 	float initialRadius = 50.0f; // Start at 50m radius
 	for (int i = 0; i < numberUAVs; ++i) {
 		float angle = (360.0f / numberUAVs) * i;
@@ -206,6 +207,14 @@ int main( void )
 	for (int i = 0; i < numberUAVs; ++i) {
 		uavs[i]->start();
 	}
+
+	// Position storage for UAVs (used in render loop)
+	std::vector<Vec3> currentPos(numberUAVs);
+
+	// --- ADD THIS TO FIX INVISIBILITY ON FRAME 1 ---
+    for (int i = 0; i < numberUAVs; ++i) {
+        currentPos[i] = uavs[i]->getPosition(); 
+    }
 
 	// For Rotation and Translation
 	static float rotationAngle = 360.0f / (float)numberUAVs;
