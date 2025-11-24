@@ -29,6 +29,7 @@ using namespace glm;
 #include <common/objloader.hpp>
 #include <common/vboindexer.hpp>
 #include <vector>
+#include "ECE_UAV.h"
 
 int main( void )
 {
@@ -177,13 +178,33 @@ int main( void )
 	double lastTime = glfwGetTime();
 	int nbFrames = 0;
 
-	// For vector initialization
-	int numberObjects = 8;
-	std::vector<glm::mat4> modelMatrices(numberObjects);
-	std::vector<glm::mat4> MVPMatrices(numberObjects);
+	// For 30ms UAV polling
+	double lastPollTime = glfwGetTime();
+	const double pollInterval = 0.030; // 30 milliseconds
+
+	// For vector initialization - 15 UAVs for multithreading
+	const int numberUAVs = 15;
+	std::vector<glm::mat4> modelMatrices(numberUAVs);
+	std::vector<glm::mat4> MVPMatrices(numberUAVs);
+
+	// Create 15 ECE_UAV objects with initial positions in a circle
+	std::vector<ECE_UAV*> uavs;
+	float initialRadius = 50.0f; // Start at 50m radius
+	for (int i = 0; i < numberUAVs; ++i) {
+		float angle = (360.0f / numberUAVs) * i;
+		float x = initialRadius * cos(glm::radians(angle));
+		float y = initialRadius * sin(glm::radians(angle));
+		float z = 5.0f; // Start at 5m height
+		uavs.push_back(new ECE_UAV(x, y, z));
+	}
+
+	// Start all UAV threads
+	for (int i = 0; i < numberUAVs; ++i) {
+		uavs[i]->start();
+	}
 
 	// For Rotation and Translation
-	static float rotationAngle = 360.0f / (float)numberObjects;
+	static float rotationAngle = 360.0f / (float)numberUAVs;
 	static float radius = 3.65f;
 	//static float radius = 5.65f;
 	float normalAngle;
@@ -302,6 +323,17 @@ int main( void )
 			lastTime += 1.0;
 		}
 
+		// Poll UAV positions every 30ms
+		if (currentTime - lastPollTime >= pollInterval) {
+			// Update positions from UAV threads
+			for (int i = 0; i < numberUAVs; ++i) {
+				double x, y, z;
+				uavs[i]->getPosition(x, y, z);
+				// Store positions for rendering (will be used in render loop below)
+			}
+			lastPollTime = currentTime;
+		}
+
 		// Clear the screen
 		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
@@ -408,18 +440,17 @@ int main( void )
 		// Set our "myTextureSampler" sampler to use Texture Unit 0
 		glUniform1i(TextureID, 0);
 
-		// For loop to draw the suzanne objects
-		for (int object = 0; object < numberObjects; ++object)
+		// For loop to draw the UAVs (using Suzanne as placeholder)
+		for (int object = 0; object < numberUAVs; ++object)
 		{
+			// Get current position from UAV thread
+			double x, y, z;
+			uavs[object]->getPosition(x, y, z);
+
 			// define model matrix and parameters
 			modelMatrices[object] = glm::mat4(1.0);
-			normalAngle = currentAngle + rotationAngle * object;
-			radNormalAngle = glm::radians(normalAngle);
-
-			// Rotation
-			modelMatrices[object] = glm::rotate(modelMatrices[object], radNormalAngle, glm::vec3(0.0f, 1.0f, 0.0f));
-			// Translation
-			modelMatrices[object] = glm::translate(modelMatrices[object], glm::vec3(0.0f, 1.0f, radius));
+			// Translate to UAV position
+			modelMatrices[object] = glm::translate(modelMatrices[object], glm::vec3((float)x, (float)y, (float)z));
 
 			// Update MVP matrix
 			MVPMatrices[object] = ProjectionMatrix * ViewMatrix * modelMatrices[object];
@@ -465,6 +496,12 @@ int main( void )
 	} // Check if the ESC key was pressed or the window was closed
 	while( glfwGetKey(window, GLFW_KEY_ESCAPE ) != GLFW_PRESS &&
 		   glfwWindowShouldClose(window) == 0 );
+
+	// Stop all UAV threads
+	for (int i = 0; i < numberUAVs; ++i) {
+		uavs[i]->stop();
+		delete uavs[i];
+	}
 
 	// Cleanup VBO and shader
 	glDeleteBuffers(1, &vertexbuffer);
