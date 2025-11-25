@@ -5,6 +5,7 @@ Physics Globals for Collision detection
 
 #include "PhysicsGlobals.h"
 #include "ECE_UAV.h"
+#include <iostream>
 
 // Define the global UAV list pointer
 std::vector<ECE_UAV*>* GLOBAL_UAV_LIST = nullptr;
@@ -44,6 +45,11 @@ void checkCollisionsFor(ECE_UAV* me)
                 Vec3 dummyVel = me->velocity;
                 me->velocity = other->velocity;
                 other->velocity = dummyVel;
+
+                // Optional: Print collision event
+                std::cout << "Collision detected between UAVs at positions: ("
+                            << myPos.x << ", " << myPos.y << ", " << myPos.z << ") and ("
+                            << otherPos.x << ", " << otherPos.y << ", " << otherPos.z << ")\n";
             }
         }
     }
