@@ -13,7 +13,9 @@ Each drone is controlled by their own individual thread, with the main program h
 
 To use the program, you navigate to the build folder and create the cmake environment
 
+  ```command
   cmake ../
   cmake --build . -j 16
+  ```
 
 This will a runnable executable in the /build/bin/ directory called "FinalProject." You will see the drones move around their preprogrammed route from an aerial view of the field.
