@@ -64,12 +64,26 @@ void threadFunction(ECE_UAV* pUAV)
     std::cout << "Thread started for UAV!" << std::endl;
 
     const double updateInterval = 0.01; // 10 msec in seconds
-    Vec3 controlForce = Vec3(0, 0, 10); // PLACEHOLDER FOR CONTROL FORCE, can be updated externally
 
+    // ------ PERSON 3 WORKS HERE FOR PID
+    // PLACEHOLDER FOR CONTROL FORCE, can be updated externally
+    // can delete both of these Vec3 functions as they were only for testing
+    
+    Vec3 controlForce = Vec3(0, 0, 10); 
+    // Vec3 target(0, 0, 20.0);
 
     
     while (pUAV->isRunning())
     {
+        // ------ PERSON 3 WORKS HERE FOR PID
+        // control logic only for testing
+        // ------ Simple control logic to move towards target
+        // Vec3 currentPos = pUAV->getPosition();
+        // Vec3 direction = target - currentPos;
+        // Vec3 controlForce = direction.normalized() * 20.0;
+        // ----- end of simple control logic -----
+
+        // ------ PERSON 2 WORKS HERE 
         // Update the UAV's kinematic information
         pUAV->updateKinematics(controlForce, updateInterval);
 
