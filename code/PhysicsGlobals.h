@@ -14,3 +14,6 @@ extern std::vector<ECE_UAV*>* GLOBAL_UAV_LIST;
 
 // Function to check for collisions between UAVs
 void checkCollisionsFor(ECE_UAV* me);
+
+// Configure the UAV collision bounding radius (in meters)
+void setUAVBoundingRadius(double radius);

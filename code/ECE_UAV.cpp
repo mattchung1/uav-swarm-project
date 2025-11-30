@@ -5,6 +5,7 @@ CPP file for ECE_UAV class. Defines functions used for the ECE_UAV class
 */
 
 #include <iostream>
+#include <algorithm>
 #include <chrono>
 #include <thread>
 #include <cmath>
@@ -19,17 +20,17 @@ CONSTRUCTOR / DESTRUCTOR & THREAD CONTROL
 // Constructor Function for ECE_UAV including position
 ECE_UAV::ECE_UAV(Vec3 initialPos)
     : position(initialPos), velocity(0, 0, 0), acceleration(0, 0, 0),
-          mass(mass), maxForce(maxForce),
+          mass(1.0), maxForce(20.0),  // FIXED: Initialize with actual values!
           currentState(FlightState::IDLE),
           targetPoint(0, 0, 50),
           sphereCenter(0, 0, 50),
           sphereRadius(10.0),
           colorPhase(0.0),
-          pidX(50.0, 0.5, 10.0),  // Tuned PID gains for X axis
-          pidY(50.0, 0.5, 10.0),  // Tuned PID gains for Y axis
-          pidZ(50.0, 0.5, 10.0)   // Tuned PID gains for Z axis
+          pidX(8.0, 0.1, 3.0),  // Tuned PID gains for radial control
+          pidY(8.0, 0.1, 3.0),  // Reserved for future axis control
+          pidZ(8.0, 0.1, 3.0)   // Reserved for future axis control
 {
-    this -> mass = 1.0; // kg
+    // Mass and maxForce already initialized in member initializer list
     this -> gravityCompensation = 10.0 * mass; // Newtons
 
     running = false;
@@ -252,12 +253,28 @@ Vec3 ECE_UAV::calculateStateBasedForce(double deltaTime)
     // ===== STATE B: ASCENT =====
     else if (currentState == FlightState::ASCENT)
     {
-        // Calculate direction to target point (0, 0, 50)
-        Vec3 directionToTarget = targetPoint - position;
-        double distanceToTarget = directionToTarget.magnitude();
+        // Calculate direction to sphere center (for distance checking)
+        Vec3 directionToCenter = sphereCenter - position;
+        double distanceToCenter = directionToCenter.magnitude();
         
-        // Check if we've reached the target (within 10m of sphere center)
-        if (distanceToTarget <= sphereRadius)
+        // Calculate how far we are from the sphere SURFACE
+        double distanceFromSurface = distanceToCenter - sphereRadius;
+        
+    // Desired direction is straight toward the sphere center
+    Vec3 desiredDirection = directionToCenter.normalized();
+        
+        // Debug output
+        static int debugCounter = 0;
+        if (debugCounter++ % 100 == 0) {
+            std::cout << "ASCENT - Pos: (" << position.x << ", " << position.y << ", " << position.z << ")"
+                      << " | Dist to center: " << distanceToCenter << "m"
+                      << " | Dist from surface: " << distanceFromSurface << "m"
+                      << " | Speed: " << velocity.magnitude() << " m/s"
+                      << " | Vel: (" << velocity.x << ", " << velocity.y << ", " << velocity.z << ")" << std::endl;
+        }
+        
+        // Check if we've reached the sphere surface (within 0.5m tolerance)
+        if (distanceFromSurface <= 0.5)
         {
             // Transition to ORBIT
             currentState = FlightState::ORBIT;
@@ -266,31 +283,54 @@ Vec3 ECE_UAV::calculateStateBasedForce(double deltaTime)
             pidX.reset();
             pidY.reset();
             pidZ.reset();
-            std::cout << "UAV transitioning to ORBIT state" << std::endl;
+            std::cout << "UAV transitioning to ORBIT state. Distance to center: " << distanceToCenter 
+                      << "m (radius: " << sphereRadius << "m)" << std::endl;
         }
         else
         {
-            // Calculate force to move towards target
-            Vec3 desiredDirection = directionToTarget.normalized();
-            
-            // Limit maximum velocity to 2 m/s during ascent
-            double currentSpeed = velocity.magnitude();
+            // Calculate direction toward sphere center (target point at (0,0,50))
             const double maxAscentSpeed = 2.0;
-            
-            if (currentSpeed < maxAscentSpeed)
+
+            // Speed component toward the target (positive when moving inward)
+            double speedTowardTarget = velocity.x * desiredDirection.x +
+                                       velocity.y * desiredDirection.y +
+                                       velocity.z * desiredDirection.z;
+
+            // Base thrust to hover plus directional control budget
+            Vec3 thrust(0.0, 0.0, gravityCompensation);
+            double availableForce = std::max(0.0, maxForce - gravityCompensation);
+
+            // Taper the target speed as we approach the sphere to avoid overshoot
+            double normalizedDistance = std::clamp(distanceFromSurface / sphereRadius, 0.0, 1.0);
+            double targetSpeed = normalizedDistance * maxAscentSpeed;
+
+            // Directional control: accelerate or brake along desiredDirection
+            double speedError = targetSpeed - speedTowardTarget;
+            double controlRatio = 0.0;
+            if (maxAscentSpeed > 0.0)
             {
-                // Apply force in direction of target
-                force = desiredDirection * maxForce;
+                controlRatio = std::clamp(speedError / maxAscentSpeed, -1.0, 1.0);
             }
-            else
+            thrust += desiredDirection * (availableForce * controlRatio);
+
+            // Lateral damping to keep approach aligned with the target direction
+            Vec3 lateralVelocity = velocity - desiredDirection * speedTowardTarget;
+            double lateralSpeed = lateralVelocity.magnitude();
+            if (lateralSpeed > 0.05 && availableForce > 0.0)
             {
-                // Apply braking force if moving too fast
-                Vec3 velocityDirection = velocity.normalized();
-                force = velocityDirection * (-maxForce * 0.5);
-                
-                // Still need to counter gravity
-                force.z += gravityCompensation;
+                Vec3 lateralDir = lateralVelocity.normalized();
+                double lateralRatio = std::clamp(lateralSpeed / maxAscentSpeed, 0.0, 1.0);
+                thrust += lateralDir * (-availableForce * 0.6 * lateralRatio);
             }
+
+            // Cap the thrust vector so we never exceed vehicle capability
+            double thrustMagnitude = thrust.magnitude();
+            if (thrustMagnitude > maxForce && thrustMagnitude > 0.0)
+            {
+                thrust = thrust * (maxForce / thrustMagnitude);
+            }
+
+            force = thrust;
         }
     }
     
@@ -309,71 +349,100 @@ Vec3 ECE_UAV::calculateStateBasedForce(double deltaTime)
         }
         else
         {
-            // Use PID controller to maintain position on sphere surface
-            
-            // Calculate current distance from sphere center
+            // Maintain orbit on 10 m sphere using radial/tangential control
             Vec3 vectorFromCenter = position - sphereCenter;
             double currentRadius = vectorFromCenter.magnitude();
-            
-            // Error: difference between desired radius and actual radius
-            double radialError = sphereRadius - currentRadius;
-            
-            // PID control for radial distance
-            // Apply force towards/away from center to maintain sphere radius
+            if (currentRadius < 1e-6)
+            {
+                vectorFromCenter = Vec3(0, 0, 1e-6);
+                currentRadius = 1e-6;
+            }
+
             Vec3 radialDirection = vectorFromCenter.normalized();
-            double radialForce = pidX.calculate(sphereRadius, currentRadius, deltaTime);
-            
-            // Apply radial correction force
-            Vec3 radialCorrectionForce = radialDirection * radialForce;
-            
-            // Add tangential force for random movement along sphere surface
-            // Project random direction onto tangent plane of sphere
-            Vec3 tangentDirection = randomDirection - radialDirection * 
-                                   (randomDirection.x * radialDirection.x + 
-                                    randomDirection.y * radialDirection.y + 
-                                    randomDirection.z * radialDirection.z);
-            tangentDirection = tangentDirection.normalized();
-            
-            // Maintain velocity between 2-10 m/s
-            double currentSpeed = velocity.magnitude();
+            double radialError = currentRadius - sphereRadius; // positive if outside the sphere
+            double radialSpeed = velocity.x * radialDirection.x +
+                                 velocity.y * radialDirection.y +
+                                 velocity.z * radialDirection.z;
+
+            double availableForce = std::max(0.0, maxForce - gravityCompensation);
+
+            // PID on radial error with additional damping on radial velocity
+            double radialControl = pidX.calculate(0.0, radialError, deltaTime) - 2.0 * radialSpeed;
+            radialControl = std::clamp(radialControl, -availableForce, availableForce);
+            Vec3 radialCorrectionForce = radialDirection * radialControl;
+
+            // Tangential direction (project random vector onto tangent plane)
+            Vec3 tangentSeed = randomDirection - radialDirection *
+                               (randomDirection.x * radialDirection.x +
+                                randomDirection.y * radialDirection.y +
+                                randomDirection.z * radialDirection.z);
+            if (tangentSeed.magnitude() < 1e-6)
+            {
+                generateRandomDirection();
+                tangentSeed = randomDirection - radialDirection *
+                              (randomDirection.x * radialDirection.x +
+                               randomDirection.y * radialDirection.y +
+                               randomDirection.z * radialDirection.z);
+            }
+            Vec3 tangentDirection = tangentSeed.normalized();
+
+            Vec3 tangentialVelocity = velocity - radialDirection * radialSpeed;
+            double tangentialSpeed = tangentialVelocity.magnitude();
+
+            // Debug output for orbit speed
+            static int orbitDebugCounter = 0;
+            if (orbitDebugCounter++ % 100 == 0) {
+                std::cout << "ORBIT - Tangential Speed: " << tangentialSpeed << " m/s"
+                          << " | Radial Error: " << radialError << "m"
+                          << " | Radius: " << currentRadius << "m" << std::endl;
+            }
+
             const double minOrbitSpeed = 2.0;
             const double maxOrbitSpeed = 10.0;
-            
-            double tangentialForce = 0.0;
-            if (currentSpeed < minOrbitSpeed)
+            const double targetOrbitSpeed = 6.0;
+
+            double tangentialRatio = 0.0;
+            if (tangentialSpeed < minOrbitSpeed)
             {
-                tangentialForce = 5.0; // Accelerate
+                tangentialRatio = std::clamp((minOrbitSpeed - tangentialSpeed) / minOrbitSpeed, 0.0, 1.0);
             }
-            else if (currentSpeed > maxOrbitSpeed)
+            else if (tangentialSpeed > maxOrbitSpeed)
             {
-                tangentialForce = -5.0; // Decelerate
+                tangentialRatio = -std::clamp((tangentialSpeed - maxOrbitSpeed) / maxOrbitSpeed, 0.0, 1.0);
             }
             else
             {
-                tangentialForce = 2.0; // Maintain speed
+                double midBandError = (targetOrbitSpeed - tangentialSpeed) / targetOrbitSpeed;
+                tangentialRatio = std::clamp(midBandError, -0.5, 0.5);
             }
-            
-            Vec3 tangentForce = tangentDirection * tangentialForce;
-            
-            // Periodically change random direction
+
+            Vec3 tangentControlDirection = tangentDirection;
+            if (tangentialRatio < 0.0 && tangentialSpeed > 0.05)
+            {
+                tangentControlDirection = tangentialVelocity.normalized();
+            }
+
+            Vec3 tangentialForce = tangentControlDirection * (availableForce * tangentialRatio);
+
+            // Periodically refresh random tangent directions to keep paths varied
             static int directionChangeCounter = 0;
             directionChangeCounter++;
-            if (directionChangeCounter > 100) // Change every ~1 second
+            if (directionChangeCounter > 200)
             {
                 generateRandomDirection();
                 directionChangeCounter = 0;
             }
-            
-            // Total force = radial correction + tangential movement + gravity compensation
-            force = radialCorrectionForce + tangentForce;
-            force.z += gravityCompensation;
-            
-            // Clamp force to maximum
-            double forceMagnitude = force.magnitude();
-            if (forceMagnitude > maxForce)
+
+            Vec3 totalForce = radialCorrectionForce + tangentialForce;
+            totalForce.z += gravityCompensation;
+
+            double totalMagnitude = totalForce.magnitude();
+            if (totalMagnitude > maxForce && totalMagnitude > 0.0)
             {
-                force = force.normalized() * maxForce;
+                totalForce = totalForce * (maxForce / totalMagnitude);
             }
+
+            force = totalForce;
         }
     }
     
