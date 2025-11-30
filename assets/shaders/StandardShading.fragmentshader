@@ -20,6 +20,7 @@ uniform bool useSolidColor = false;
 uniform vec3 solidColor = vec3(0.0, 1.0, 0.0);  // default green
 uniform float solidAlpha = 1.0;  // default opaque
 uniform int uEnableDirect;  // 0 = off, 1 = on
+uniform float uColorIntensity = 1.0;  // scales diffuse/surface color (ECE6122 requirement)
 
 void main(){
 
@@ -75,6 +76,7 @@ void main(){
 
 	// Color with toggle
 	vec3 finalColor = ambient + direct * (diffuse + specular);
+	finalColor *= uColorIntensity;
 	
 	// Output with alpha channel
 	float alpha = useSolidColor ? solidAlpha : 1.0;

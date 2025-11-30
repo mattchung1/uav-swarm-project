@@ -10,6 +10,9 @@ Description:
 #include <stdio.h>
 #include <stdlib.h>
 #include <vector>
+#include <iostream>
+#include <limits>
+#include <algorithm>
 
 // Include GLEW
 #include <GL/glew.h>
@@ -129,10 +132,12 @@ int main( void )
 	
 	// Get a handle for our "myTextureSampler" uniform
 	GLuint TextureID  = glGetUniformLocation(programID, "myTextureSampler");
+	GLint uColorIntensityID = glGetUniformLocation(programID, "uColorIntensity");
 
 	// Bind our texture in Texture Unit 0
 	glUseProgram(programID);        
 	glUniform1i(TextureID, 0);    
+	glUniform1f(uColorIntensityID, 1.0f);
 
 
 
@@ -148,6 +153,34 @@ int main( void )
 	std::vector<glm::vec2> indexed_uvs;
 	std::vector<glm::vec3> indexed_normals;
 	indexVBO(vertices, uvs, normals, indices, indexed_vertices, indexed_uvs, indexed_normals);
+
+		// Compute bounding box of the UAV model to derive a consistent scale factor
+		glm::vec3 minBounds(std::numeric_limits<float>::max());
+		glm::vec3 maxBounds(std::numeric_limits<float>::lowest());
+		for (const glm::vec3& v : indexed_vertices)
+		{
+			minBounds.x = std::min(minBounds.x, v.x);
+			minBounds.y = std::min(minBounds.y, v.y);
+			minBounds.z = std::min(minBounds.z, v.z);
+
+			maxBounds.x = std::max(maxBounds.x, v.x);
+			maxBounds.y = std::max(maxBounds.y, v.y);
+			maxBounds.z = std::max(maxBounds.z, v.z);
+		}
+
+		const float extentX = maxBounds.x - minBounds.x;
+		const float extentY = maxBounds.y - minBounds.y;
+		const float extentZ = maxBounds.z - minBounds.z;
+		const float maxExtent = std::max(std::max(extentX, extentY), extentZ);
+
+		const float desiredBoundingBoxMeters = 0.2f; // Physical requirement (20 cm cube)
+		const float visualScaleMultiplier = 3.0f;     // Increase for readability (set to 1.0 for spec-accurate size)
+		const float baseScale = maxExtent > 0.0f ? desiredBoundingBoxMeters / maxExtent : 1.0f;
+		const float uavScale = baseScale * visualScaleMultiplier;
+		const float uavBoundingRadiusMeters = 0.5f * desiredBoundingBoxMeters * visualScaleMultiplier;
+
+		// Update physics collision radius to match rendered drone size
+		setUAVBoundingRadius(uavBoundingRadiusMeters);
 
 	// Load it into a VBO
 
@@ -189,18 +222,30 @@ int main( void )
 	std::vector<glm::mat4> modelMatrices(numberUAVs);
 	std::vector<glm::mat4> MVPMatrices(numberUAVs);
 
-	// Create 15 ECE_UAV objects with initial positions in a circle
+	// Create 15 ECE_UAV objects positioned on specified yard lines (converted to meters)
 	std::vector<ECE_UAV*> uavs;
-	// Set the global UAV list pointer for collision detection
 	GLOBAL_UAV_LIST = &uavs;
-	float initialRadius = 50.0f; // Start at 50m radius
-	for (int i = 0; i < numberUAVs; ++i) {
-		float angle = (360.0f / numberUAVs) * i;
-		float x = initialRadius * cos(glm::radians(angle));
-		float y = initialRadius * sin(glm::radians(angle));
-		float z = 5.0f; // Start at 5m height
-		Vec3 initialPos(x, y, z);
-		uavs.push_back(new ECE_UAV(initialPos));
+	const float yardsToMeters = 0.9144f;
+	const std::vector<float> yardLinePositions = {
+		-50.0f * yardsToMeters,
+		-25.0f * yardsToMeters,
+		  0.0f,
+		 25.0f * yardsToMeters,
+		 50.0f * yardsToMeters
+	};
+	// Place three UAVs across the field width for each yard line (approx. left, center, right lanes)
+	const std::vector<float> lateralOffsets = { -16.0f, 0.0f, 16.0f };
+	for (float yardY : yardLinePositions)
+	{
+		for (float laneX : lateralOffsets)
+		{
+			if (uavs.size() >= static_cast<size_t>(numberUAVs))
+			{
+				break;
+			}
+			Vec3 initialPos(laneX, yardY, 0.0f); // Start on the ground
+			uavs.push_back(new ECE_UAV(initialPos));
+		}
 	}
 
 	// Start all UAV threads
@@ -315,6 +360,7 @@ int main( void )
 	bool enableDirect = true;
 	int lastL = GLFW_RELEASE;
 
+	bool simulationRunning = true;
 	do{
 		// Update light toggle
 		int L = glfwGetKey(window, GLFW_KEY_L);
@@ -338,11 +384,20 @@ int main( void )
 
 		// Poll UAV positions every 30ms
 		if (currentTime - lastPollTime >= pollInterval) {
-			// Update positions from UAV threads
+			// Update positions from UAV threads and check completion state
+			bool allFinished = true;
 			for (int i = 0; i < numberUAVs; ++i) {
 				currentPos[i] = uavs[i]->getPosition();
-				// Store positions for rendering (will be used in render loop below)
-				
+				FlightState state = uavs[i]->getFlightState();
+				if (state != FlightState::FINISHED)
+				{
+					allFinished = false;
+				}
+			}
+			if (allFinished)
+			{
+				std::cout << "All UAVs completed their orbit — ending simulation." << std::endl;
+				simulationRunning = false;
 			}
 			lastPollTime = currentTime;
 		}
@@ -379,6 +434,7 @@ int main( void )
 
 		glUniformMatrix4fv(MatrixID, 1, GL_FALSE, &MVP[0][0]);
 		glUniformMatrix4fv(ModelMatrixID, 1, GL_FALSE, &modelMatrix[0][0]);
+		glUniform1f(uColorIntensityID, 1.0f);
 
 		// draw:
 		glEnableVertexAttribArray(0);
@@ -416,6 +472,7 @@ int main( void )
 
 		glUniformMatrix4fv(MatrixID, 1, GL_FALSE, &sphereMVP[0][0]);
 		glUniformMatrix4fv(ModelMatrixID, 1, GL_FALSE, &sphereModelMatrix[0][0]);
+		glUniform1f(uColorIntensityID, 1.0f);
 
 		// Draw sphere
 		glEnableVertexAttribArray(0);
@@ -462,18 +519,22 @@ int main( void )
 			x = currentPos[object].x;
 			y = currentPos[object].y;
 			z = currentPos[object].z;
+			double colorIntensity = uavs[object]->getColorIntensity();
 			
 
 			// define model matrix and parameters
 			modelMatrices[object] = glm::mat4(1.0);
 			// Translate to UAV position
 			modelMatrices[object] = glm::translate(modelMatrices[object], glm::vec3((float)x, (float)y, (float)z));
+			// Uniform scale to meet 20 cm bounding-box requirement
+			modelMatrices[object] = glm::scale(modelMatrices[object], glm::vec3(uavScale));
 
 			// Update MVP matrix
 			MVPMatrices[object] = ProjectionMatrix * ViewMatrix * modelMatrices[object];
 
 			glUniformMatrix4fv(MatrixID, 1, GL_FALSE, &MVPMatrices[object][0][0]);
 			glUniformMatrix4fv(ModelMatrixID, 1, GL_FALSE, &modelMatrices[object][0][0]);
+			glUniform1f(uColorIntensityID, static_cast<float>(colorIntensity));
 
 			// The rest is exactly the same as the first object
 		
@@ -505,14 +566,16 @@ int main( void )
 		glDisableVertexAttribArray(0);
 		glDisableVertexAttribArray(1);
 		glDisableVertexAttribArray(2);
+		glUniform1f(uColorIntensityID, 1.0f);
 
 		// Swap buffers
 		glfwSwapBuffers(window);
 		glfwPollEvents();
 
 	} // Check if the ESC key was pressed or the window was closed
-	while( glfwGetKey(window, GLFW_KEY_ESCAPE ) != GLFW_PRESS &&
-		   glfwWindowShouldClose(window) == 0 );
+	while( simulationRunning &&
+		  glfwGetKey(window, GLFW_KEY_ESCAPE ) != GLFW_PRESS &&
+		  glfwWindowShouldClose(window) == 0 );
 
 	// Stop all UAV threads
 	for (int i = 0; i < numberUAVs; ++i) {
