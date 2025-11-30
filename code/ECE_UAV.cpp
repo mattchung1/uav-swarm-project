@@ -224,8 +224,11 @@ Vec3 ECE_UAV::calculateStateBasedForce(double deltaTime)
     double elapsedTime = getElapsedTime();
     Vec3 force(0, 0, 0);
     
-    // Update color phase for ECE6122 requirement
+    // Update color phase for ECE6122 requirement and keep it bounded
     colorPhase += 2.0 * M_PI * 0.5 * deltaTime; // 0.5 Hz oscillation
+    if (colorPhase > 2.0 * M_PI) {
+        colorPhase = std::fmod(colorPhase, 2.0 * M_PI);
+    }
     
     // ===== STATE A: IDLE (0-5 seconds) =====
     if (currentState == FlightState::IDLE)

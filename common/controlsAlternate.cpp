@@ -36,7 +36,7 @@ float theta = 45.0f;
 float phi = 30.0f;
 //float deltaRadius = 0.01f;
 //float deltaAngle = 0.1f;
-float deltaRadius = 30.0f;
+float deltaRadius = 240.0f; // Faster zoom when using W/S
 float deltaAngle = 50.0f;
 
 
