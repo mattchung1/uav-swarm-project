@@ -19,6 +19,7 @@ enum class FlightState
     IDLE,       // 0-5 seconds: Remain on ground
     ASCENT,     // Launch phase: Fly to (0,0,50) with max velocity 2 m/s
     ORBIT,      // Orbit phase: Fly on sphere surface for 60 seconds
+    RETURN,     // Descend and travel back to launch position
     FINISHED    // Simulation complete
 };
 
@@ -29,6 +30,9 @@ class ECE_UAV
         Vec3 position;
         Vec3 velocity;
         Vec3 acceleration;
+
+    // Home pad for return-to-start requirement
+    Vec3 homePosition;
         
         // Mass of UAV (1 kg)
         double mass; // kg
