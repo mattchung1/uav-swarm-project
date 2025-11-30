@@ -7,6 +7,28 @@
 
 #include "objloader.hpp"
 
+static bool normalizeIndex(int rawIndex, size_t collectionSize, unsigned int &resolved){
+	if(collectionSize == 0){
+		return false;
+	}
+	if(rawIndex > 0){
+		if(static_cast<size_t>(rawIndex) > collectionSize){
+			return false;
+		}
+		resolved = static_cast<unsigned int>(rawIndex);
+		return true;
+	}
+	if(rawIndex < 0){
+		int converted = static_cast<int>(collectionSize) + rawIndex + 1; // OBJ negative indices are relative to the end
+		if(converted <= 0){
+			return false;
+		}
+		resolved = static_cast<unsigned int>(converted);
+		return true;
+	}
+	return false;
+}
+
 // Very, VERY simple OBJ loader.
 // Here is a short list of features a real function would provide : 
 // - Binary files. Reading a model should be just a few memcpy's away, not parsing a file at runtime. In short : OBJ is not very great.
@@ -63,12 +85,22 @@ bool loadOBJ(
 			temp_normals.push_back(normal);
 		}else if ( strcmp( lineHeader, "f" ) == 0 ){
 			std::string vertex1, vertex2, vertex3;
+			int vertexIndexRaw[3], uvIndexRaw[3], normalIndexRaw[3];
 			unsigned int vertexIndex[3], uvIndex[3], normalIndex[3];
-			int matches = fscanf(file, "%d/%d/%d %d/%d/%d %d/%d/%d\n", &vertexIndex[0], &uvIndex[0], &normalIndex[0], &vertexIndex[1], &uvIndex[1], &normalIndex[1], &vertexIndex[2], &uvIndex[2], &normalIndex[2] );
+			int matches = fscanf(file, "%d/%d/%d %d/%d/%d %d/%d/%d\n", &vertexIndexRaw[0], &uvIndexRaw[0], &normalIndexRaw[0], &vertexIndexRaw[1], &uvIndexRaw[1], &normalIndexRaw[1], &vertexIndexRaw[2], &uvIndexRaw[2], &normalIndexRaw[2] );
 			if (matches != 9){
 				printf("File can't be read by our simple parser :-( Try exporting with other options\n");
 				fclose(file);
 				return false;
+			}
+			for(int k = 0; k < 3; ++k){
+				if(!normalizeIndex(vertexIndexRaw[k], temp_vertices.size(), vertexIndex[k]) ||
+				   !normalizeIndex(uvIndexRaw[k], temp_uvs.size(), uvIndex[k]) ||
+				   !normalizeIndex(normalIndexRaw[k], temp_normals.size(), normalIndex[k])){
+					printf("OBJ face references invalid index (possibly due to negative indices).\n");
+					fclose(file);
+					return false;
+				}
 			}
 			vertexIndices.push_back(vertexIndex[0]);
 			vertexIndices.push_back(vertexIndex[1]);

@@ -40,6 +40,12 @@ list(REMOVE_ITEM PROJECT_SOURCES
 # ---- Final executable ----
 add_executable(FinalProject ${PROJECT_SOURCES})
 
+# Explicitly add core physics sources so they are always linked.
+target_sources(FinalProject PRIVATE
+    code/PhysicsGlobals.cpp
+    code/PIDController.cpp
+)
+
 # Copy assets to the runtime output directory (e.g., build/bin)
 add_custom_command(TARGET FinalProject POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy_directory

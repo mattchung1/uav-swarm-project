@@ -9,6 +9,7 @@ Description:
 
 #include <stdio.h>
 #include <stdlib.h>
+#include <array>
 #include <vector>
 #include <iostream>
 #include <limits>
@@ -114,9 +115,24 @@ int main( void )
 	GLint uUseSolid   = glGetUniformLocation(programID, "useSolidColor");
 	GLint uSolidColor = glGetUniformLocation(programID, "solidColor");
 	GLint uSolidAlpha = glGetUniformLocation(programID, "solidAlpha");
+	GLint uColorIntensityLoc = glGetUniformLocation(programID, "uColorIntensity");
 
-	// Load the texture
-	GLuint Texture = loadDDS("assets/textures/uvmap.DDS");
+	// Load the texture with multiple fallbacks (DDS -> stb -> JPG -> legacy)
+	GLuint Texture = loadDDS("assets/textures/txtr01.DDS");
+	if (!Texture) {
+		Texture = loadTextureWithStb("assets/textures/txtr01.DDS");
+	}
+	if (!Texture) {
+		Texture = loadTextureWithStb("assets/textures/txtr01.jpg");
+	}
+	if (!Texture) {
+		fprintf(stderr, "Failed to load new texture; falling back to assets/textures/cat.DDS.\n");
+		Texture = loadDDS("assets/textures/cat.DDS");
+	}
+	if (!Texture) {
+		fprintf(stderr, "Unable to load any UAV texture.\n");
+		return -1;
+	}
 
 	// Load floor texture
 	GLuint floorTexture = loadBMP_custom("assets/textures/ff.bmp");
@@ -146,7 +162,7 @@ int main( void )
 	std::vector<glm::vec3> vertices;
 	std::vector<glm::vec2> uvs;
 	std::vector<glm::vec3> normals;
-	bool res = loadOBJ("assets/models/suzanne.obj", vertices, uvs, normals);
+	bool res = loadOBJ("assets/models/chicken_01.obj", vertices, uvs, normals);
 
 	std::vector<unsigned short> indices;
 	std::vector<glm::vec3> indexed_vertices;
@@ -222,30 +238,38 @@ int main( void )
 	std::vector<glm::mat4> modelMatrices(numberUAVs);
 	std::vector<glm::mat4> MVPMatrices(numberUAVs);
 
-	// Create 15 ECE_UAV objects positioned on specified yard lines (converted to meters)
+	// Create 15 ECE_UAV objects placed on football yard lines using a 3x5 grid
 	std::vector<ECE_UAV*> uavs;
 	GLOBAL_UAV_LIST = &uavs;
-	const float yardsToMeters = 0.9144f;
-	const std::vector<float> yardLinePositions = {
-		-50.0f * yardsToMeters,
-		-25.0f * yardsToMeters,
-		  0.0f,
-		 25.0f * yardsToMeters,
-		 50.0f * yardsToMeters
-	};
-	// Place three UAVs across the field width for each yard line (approx. left, center, right lanes)
-	const std::vector<float> lateralOffsets = { -16.0f, 0.0f, 16.0f };
-	for (float yardY : yardLinePositions)
-	{
-		for (float laneX : lateralOffsets)
-		{
-			if (uavs.size() >= static_cast<size_t>(numberUAVs))
-			{
-				break;
-			}
-			Vec3 initialPos(laneX, yardY, 0.0f); // Start on the ground
-			uavs.push_back(new ECE_UAV(initialPos));
+
+	const float halfFieldLengthYards = 50.0f;          // Goal line to midfield
+	const float halfFieldLengthUnits = 128.0f;         // Matches floorDepth below
+	const float yardsToUnits = halfFieldLengthUnits / halfFieldLengthYards;
+
+	const float halfFieldWidthYards = 26.6667f;        // 160 ft / 2 converted to yards
+	const float halfFieldWidthUnits = 256.0f;          // Matches floorWidth below
+	const float lateralScale = halfFieldWidthUnits / halfFieldWidthYards;
+
+	const std::array<float, 3> yardLineOffsetsYards = {-43.f, 0.f, 43.f};
+	const std::array<float, 5> lateralOffsetsYards = {-20.f, -10.f, 0.f, 10.f, 20.f};
+
+	std::vector<Vec3> formationPositions;
+	formationPositions.reserve(yardLineOffsetsYards.size() * lateralOffsetsYards.size());
+	for (float yardLine : yardLineOffsetsYards) {
+		float y = yardLine * yardsToUnits;
+		for (float lateral : lateralOffsetsYards) {
+			float x = lateral * lateralScale;
+			formationPositions.emplace_back(x, y, 5.0f);
 		}
+	}
+
+	if (formationPositions.size() < static_cast<size_t>(numberUAVs)) {
+		fprintf(stderr, "Formation definition does not cover all UAVs.\n");
+		return -1;
+	}
+
+	for (int i = 0; i < numberUAVs; ++i) {
+		uavs.push_back(new ECE_UAV(formationPositions[i]));
 	}
 
 	// Start all UAV threads
@@ -420,7 +444,8 @@ int main( void )
 		
 		/////// Create Green Floor ////////
 		glDisable(GL_CULL_FACE);
-		glm::mat4 modelMatrix = glm::mat4(1.0);
+		glm::mat4 modelMatrix = glm::mat4(1.0f);
+		modelMatrix = glm::translate(modelMatrix, glm::vec3(-16.0f, 0.0f, 0.0f)); // offset to make the football field fit nicely with the current orientation of objects
 		glm::mat4 MVP = ProjectionMatrix * ViewMatrix * modelMatrix;
 
 		// Set solid color to true (green)
@@ -429,6 +454,7 @@ int main( void )
 
 		// Set floor texture
 		glUniform1i(uUseSolid, GL_FALSE);
+		glUniform1f(uColorIntensityLoc, 1.0f);
 		glActiveTexture(GL_TEXTURE0);
 		glBindTexture(GL_TEXTURE_2D, floorTexture);
 
@@ -467,6 +493,7 @@ int main( void )
 
 		// Use solid color for sphere (semi-transparent cyan/blue)
 		glUniform1i(uUseSolid, GL_TRUE);
+		glUniform1f(uColorIntensityLoc, 1.0f);
 		glUniform3f(uSolidColor, 0.3f, 0.7f, 1.0f);
 		glUniform1f(uSolidAlpha, 0.3f);  // 30% opacity for transparency
 
@@ -510,7 +537,11 @@ int main( void )
 		// Set our "myTextureSampler" sampler to use Texture Unit 0
 		glUniform1i(TextureID, 0);
 
-		// For loop to draw the UAVs (using Suzanne as placeholder)
+		// Precompute orientation/scale so each chicken stands upright and smaller
+		const glm::mat4 chickenOrientation = glm::rotate(glm::mat4(1.0f), glm::radians(90.0f), glm::vec3(1.0f, 0.0f, 0.0f));
+		const glm::vec3 chickenScale(0.05f);
+
+		// For loop to draw the UAVs (using Suzanne/chicken mesh as placeholder)
 		for (int object = 0; object < numberUAVs; ++object)
 		{
 			// Get current position from UAV thread
@@ -524,10 +555,12 @@ int main( void )
 
 			// define model matrix and parameters
 			modelMatrices[object] = glm::mat4(1.0);
-			// Translate to UAV position
+			float colorIntensity = static_cast<float>(uavs[object]->getColorIntensity());
+			glUniform1f(uColorIntensityLoc, colorIntensity);
+			// Translate to UAV position, then orient upright and scale down
 			modelMatrices[object] = glm::translate(modelMatrices[object], glm::vec3((float)x, (float)y, (float)z));
-			// Uniform scale to meet 20 cm bounding-box requirement
-			modelMatrices[object] = glm::scale(modelMatrices[object], glm::vec3(uavScale));
+			modelMatrices[object] = modelMatrices[object] * chickenOrientation;
+			modelMatrices[object] = glm::scale(modelMatrices[object], chickenScale);
 
 			// Update MVP matrix
 			MVPMatrices[object] = ProjectionMatrix * ViewMatrix * modelMatrices[object];
