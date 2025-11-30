@@ -81,6 +81,9 @@ class ECE_UAV
         // Color oscillation (ECE6122 requirement)
         double colorPhase;
 
+        // Flag to indicate completion of the 60-second orbit window
+        bool orbitCompleted;
+
     public:
         /*
         **************************
@@ -156,6 +159,9 @@ class ECE_UAV
         Output: Value between 0.5 and 1.0 for color intensity
         */
         double getColorIntensity();
+
+        // Whether this UAV has satisfied the 60-second orbit requirement
+        bool hasCompletedOrbit();
         
         /*
         Calculate control force based on current flight state

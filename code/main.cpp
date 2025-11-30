@@ -190,7 +190,7 @@ int main( void )
 		const float maxExtent = std::max(std::max(extentX, extentY), extentZ);
 
 		const float desiredBoundingBoxMeters = 0.2f; // Physical requirement (20 cm cube)
-		const float visualScaleMultiplier = 3.0f;     // Increase for readability (set to 1.0 for spec-accurate size)
+		const float visualScaleMultiplier = 5.0f;     // Make it look bigger for visibility
 		const float baseScale = maxExtent > 0.0f ? desiredBoundingBoxMeters / maxExtent : 1.0f;
 		const float uavScale = baseScale * visualScaleMultiplier;
 		const float uavBoundingRadiusMeters = 0.5f * desiredBoundingBoxMeters * visualScaleMultiplier;
@@ -259,7 +259,7 @@ int main( void )
 		float y = yardLine * yardsToUnits;
 		for (float lateral : lateralOffsetsYards) {
 			float x = lateral * lateralScale;
-			formationPositions.emplace_back(x, y, 5.0f);
+			formationPositions.emplace_back(x, y, 0.0f); // 
 		}
 	}
 
@@ -412,8 +412,7 @@ int main( void )
 			bool allFinished = true;
 			for (int i = 0; i < numberUAVs; ++i) {
 				currentPos[i] = uavs[i]->getPosition();
-				FlightState state = uavs[i]->getFlightState();
-				if (state != FlightState::FINISHED)
+				if (!uavs[i]->hasCompletedOrbit())
 				{
 					allFinished = false;
 				}
@@ -485,6 +484,79 @@ int main( void )
 		/////// End of Green Floor ////////
 
 
+
+
+		/////// NEW MATRIX TO RENDER ALL OBJECTS ////////
+		glEnable(GL_CULL_FACE);
+
+		// Disable solid color for objects
+		glUseProgram(programID);
+		glUniform1i(uUseSolid, GL_FALSE);   
+
+		glUseProgram(programID);
+
+		// Bind our texture in Texture Unit 0
+		glActiveTexture(GL_TEXTURE0);
+		glBindTexture(GL_TEXTURE_2D, Texture);
+		// Set our "myTextureSampler" sampler to use Texture Unit 0
+		glUniform1i(TextureID, 0);
+
+		// Precompute orientation and scale so each UAV stands upright and matches physics bounds
+		const glm::mat4 uavOrientation = glm::rotate(glm::mat4(1.0f), glm::radians(90.0f), glm::vec3(1.0f, 0.0f, 0.0f));
+		const glm::vec3 uavScaleVec(uavScale);
+
+		// For loop to draw the UAVs
+		for (int object = 0; object < numberUAVs; ++object)
+		{
+			// Get current position from UAV thread
+			double x, y, z;
+
+			x = currentPos[object].x;
+			y = currentPos[object].y;
+			z = currentPos[object].z;
+			
+
+			// define model matrix and parameters
+			modelMatrices[object] = glm::mat4(1.0);
+			float colorIntensity = static_cast<float>(uavs[object]->getColorIntensity());
+			glUniform1f(uColorIntensityLoc, colorIntensity);
+			// Translate to UAV position, then orient upright and scale down
+			modelMatrices[object] = glm::translate(modelMatrices[object], glm::vec3((float)x, (float)y, (float)z));
+			modelMatrices[object] = modelMatrices[object] * uavOrientation;
+			modelMatrices[object] = glm::scale(modelMatrices[object], uavScaleVec);
+
+			// Update MVP matrix
+			MVPMatrices[object] = ProjectionMatrix * ViewMatrix * modelMatrices[object];
+
+			glUniformMatrix4fv(MatrixID, 1, GL_FALSE, &MVPMatrices[object][0][0]);
+			glUniformMatrix4fv(ModelMatrixID, 1, GL_FALSE, &modelMatrices[object][0][0]);
+
+			// The rest is exactly the same as the first object
+		
+			// 1rst attribute buffer : vertices
+			glEnableVertexAttribArray(0);
+			glBindBuffer(GL_ARRAY_BUFFER, vertexbuffer);
+			glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 0, (void*)0);
+
+			// 2nd attribute buffer : UVs
+			glEnableVertexAttribArray(1);
+			glBindBuffer(GL_ARRAY_BUFFER, uvbuffer);
+			glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 0, (void*)0);
+
+			// 3rd attribute buffer : normals
+			glEnableVertexAttribArray(2);
+			glBindBuffer(GL_ARRAY_BUFFER, normalbuffer);
+			glVertexAttribPointer(2, 3, GL_FLOAT, GL_FALSE, 0, (void*)0);
+
+			// Index buffer
+			glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, elementbuffer);
+
+			// Draw the triangles !
+			glDrawElements(GL_TRIANGLES, indices.size(), GL_UNSIGNED_SHORT, (void*)0);
+		}
+
+		/////// END OF NEW MATRIX //////////
+
 		/////// Draw Semi-Transparent Target Sphere ////////
 		// Position: (0, 0, 50) in Z-up coordinate system
 		glm::mat4 sphereModelMatrix = glm::mat4(1.0);
@@ -522,79 +594,6 @@ int main( void )
 		/////// End of Target Sphere ////////
 
 
-		/////// NEW MATRIX TO RENDER ALL OBJECTS ////////
-		glEnable(GL_CULL_FACE);
-
-		// Disable solid color for objects
-		glUseProgram(programID);
-		glUniform1i(uUseSolid, GL_FALSE);   
-
-		glUseProgram(programID);
-
-		// Bind our texture in Texture Unit 0
-		glActiveTexture(GL_TEXTURE0);
-		glBindTexture(GL_TEXTURE_2D, Texture);
-		// Set our "myTextureSampler" sampler to use Texture Unit 0
-		glUniform1i(TextureID, 0);
-
-		// Precompute orientation/scale so each chicken stands upright and smaller
-		const glm::mat4 chickenOrientation = glm::rotate(glm::mat4(1.0f), glm::radians(90.0f), glm::vec3(1.0f, 0.0f, 0.0f));
-		const glm::vec3 chickenScale(0.05f);
-
-		// For loop to draw the UAVs (using Suzanne/chicken mesh as placeholder)
-		for (int object = 0; object < numberUAVs; ++object)
-		{
-			// Get current position from UAV thread
-			double x, y, z;
-
-			x = currentPos[object].x;
-			y = currentPos[object].y;
-			z = currentPos[object].z;
-			double colorIntensity = uavs[object]->getColorIntensity();
-			
-
-			// define model matrix and parameters
-			modelMatrices[object] = glm::mat4(1.0);
-			float colorIntensity = static_cast<float>(uavs[object]->getColorIntensity());
-			glUniform1f(uColorIntensityLoc, colorIntensity);
-			// Translate to UAV position, then orient upright and scale down
-			modelMatrices[object] = glm::translate(modelMatrices[object], glm::vec3((float)x, (float)y, (float)z));
-			modelMatrices[object] = modelMatrices[object] * chickenOrientation;
-			modelMatrices[object] = glm::scale(modelMatrices[object], chickenScale);
-
-			// Update MVP matrix
-			MVPMatrices[object] = ProjectionMatrix * ViewMatrix * modelMatrices[object];
-
-			glUniformMatrix4fv(MatrixID, 1, GL_FALSE, &MVPMatrices[object][0][0]);
-			glUniformMatrix4fv(ModelMatrixID, 1, GL_FALSE, &modelMatrices[object][0][0]);
-			glUniform1f(uColorIntensityID, static_cast<float>(colorIntensity));
-
-			// The rest is exactly the same as the first object
-		
-			// 1rst attribute buffer : vertices
-			glEnableVertexAttribArray(0);
-			glBindBuffer(GL_ARRAY_BUFFER, vertexbuffer);
-			glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 0, (void*)0);
-
-			// 2nd attribute buffer : UVs
-			glEnableVertexAttribArray(1);
-			glBindBuffer(GL_ARRAY_BUFFER, uvbuffer);
-			glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 0, (void*)0);
-
-			// 3rd attribute buffer : normals
-			glEnableVertexAttribArray(2);
-			glBindBuffer(GL_ARRAY_BUFFER, normalbuffer);
-			glVertexAttribPointer(2, 3, GL_FLOAT, GL_FALSE, 0, (void*)0);
-
-			// Index buffer
-			glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, elementbuffer);
-
-			// Draw the triangles !
-			glDrawElements(GL_TRIANGLES, indices.size(), GL_UNSIGNED_SHORT, (void*)0);
-		}
-
-		/////// END OF NEW MATRIX //////////
-
 		// Disable vertex arrays
 		glDisableVertexAttribArray(0);
 		glDisableVertexAttribArray(1);
@@ -630,3 +629,4 @@ int main( void )
 
 	return 0;
 }
+

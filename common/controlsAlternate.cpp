@@ -54,6 +54,8 @@ void computeMatricesFromInputs(){
 	// Position and Origin vectors
 	glm::vec3 origin = glm::vec3(0,0,0);
 
+	glm::vec3 targetSphere = glm::vec3(0,0,50);
+
 	// Up vector - Z is up for our coordinate system
 	glm::vec3 up = glm::vec3(0,0,1);
 
@@ -107,7 +109,7 @@ void computeMatricesFromInputs(){
 	// Camera matrix
 	ViewMatrix = glm::lookAt(
 		position,           // Camera is here
-		origin, // and looks here : at the same position, plus "direction"
+		targetSphere, // and looks here : at the same position, plus "direction"
 		up                  // Head is up (set to 0,-1,0 to look upside-down)
 	);
 
