@@ -26,6 +26,7 @@ ECE_UAV::ECE_UAV(Vec3 initialPos)
           sphereCenter(0, 0, 50),
           sphereRadius(10.0),
           colorPhase(0.0),
+             orbitCompleted(false),
           pidX(8.0, 0.1, 3.0),  // Tuned PID gains for radial control
           pidY(8.0, 0.1, 3.0),  // Reserved for future axis control
           pidZ(8.0, 0.1, 3.0)   // Reserved for future axis control
@@ -96,11 +97,11 @@ void threadFunction(ECE_UAV* pUAV)
         // Sleep for 10 milliseconds
         std::this_thread::sleep_for(std::chrono::milliseconds(10));
 
-        // For debugging: check for explosion condition
-        Vec3 pos = pUAV->getPosition();
-        if (pos.z > 100 || pos.z < -100) { 
-             std::cout << "EXPLOSION DETECTED! Z: " << pos.z << std::endl;
-        }
+        // Debug logging disabled: explosion detection was noisy in normal runs
+        // Vec3 pos = pUAV->getPosition();
+        // if (pos.z > 100 || pos.z < -100) {
+        //      std::cout << "EXPLOSION DETECTED! Z: " << pos.z << std::endl;
+        // }
     }
 
 }
@@ -197,6 +198,12 @@ double ECE_UAV::getColorIntensity()
     // This oscillates between 0.5 (half) and 1.0 (full)
     double intensity = 0.75 + 0.25 * std::sin(colorPhase);
     return intensity;
+}
+
+bool ECE_UAV::hasCompletedOrbit()
+{
+    std::lock_guard<std::mutex> lock(dataMutex);
+    return orbitCompleted;
 }
 
 /*
@@ -341,13 +348,71 @@ Vec3 ECE_UAV::calculateStateBasedForce(double deltaTime)
         auto currentTime = std::chrono::steady_clock::now();
         std::chrono::duration<double> orbitElapsed = currentTime - orbitStartTime;
         
-        if (orbitElapsed.count() >= 60.0)
-        {
-            currentState = FlightState::FINISHED;
-            std::cout << "UAV finished orbit - simulation complete" << std::endl;
-            force = Vec3(0, 0, gravityCompensation); // Hover in place
-        }
-        else
+            if (orbitElapsed.count() >= 60.0)
+            {
+                orbitCompleted = true;
+            }
+
+            // Use PID controller to maintain position on sphere surface even after completion
+
+            // Calculate current distance from sphere center
+            Vec3 vectorFromCenter = position - sphereCenter;
+            double currentRadius = vectorFromCenter.magnitude();
+        
+            // PID control for radial distance
+            Vec3 radialDirection = vectorFromCenter.normalized();
+            double radialForce = pidX.calculate(sphereRadius, currentRadius, deltaTime);
+        
+            // Apply radial correction force
+            Vec3 radialCorrectionForce = radialDirection * radialForce;
+        
+            // Add tangential force for random movement along sphere surface
+            Vec3 tangentDirection = randomDirection - radialDirection * 
+                                   (randomDirection.x * radialDirection.x + 
+                                    randomDirection.y * radialDirection.y + 
+                                    randomDirection.z * radialDirection.z);
+            tangentDirection = tangentDirection.normalized();
+        
+            // Maintain velocity between 2-10 m/s
+            double currentSpeed = velocity.magnitude();
+            const double minOrbitSpeed = 2.0;
+            const double maxOrbitSpeed = 10.0;
+        
+            double tangentialForce = 0.0;
+            if (currentSpeed < minOrbitSpeed)
+            {
+                tangentialForce = 5.0; // Accelerate
+            }
+            else if (currentSpeed > maxOrbitSpeed)
+            {
+                tangentialForce = -5.0; // Decelerate
+            }
+            else
+            {
+                tangentialForce = 2.0; // Maintain speed
+            }
+        
+            Vec3 tangentForce = tangentDirection * tangentialForce;
+        
+            // Periodically change random direction
+            static int directionChangeCounter = 0;
+            directionChangeCounter++;
+            if (directionChangeCounter > 200)
+            {
+                generateRandomDirection();
+                directionChangeCounter = 0;
+            }
+        
+            // Total force = radial correction + tangential movement + gravity compensation
+            force = radialCorrectionForce + tangentForce;
+            force.z += gravityCompensation;
+        
+            // Clamp force to maximum
+            double forceMagnitude = force.magnitude();
+            if (forceMagnitude > maxForce)
+            {
+                force = force.normalized() * maxForce;
+            }
         {
             // Maintain orbit on 10 m sphere using radial/tangential control
             Vec3 vectorFromCenter = position - sphereCenter;
