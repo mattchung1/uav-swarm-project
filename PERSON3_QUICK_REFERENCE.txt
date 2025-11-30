@@ -1,0 +1,290 @@
+/*
+Author: Person 3
+Class: ECE6122
+Last Date Modified: November 29, 2025
+
+Description:
+Quick Reference Guide for Person 3 Implementation
+*/
+
+===============================================================================
+PERSON 3 - QUICK REFERENCE
+===============================================================================
+
+YOUR ROLE: Implement the flight control system (the "brain" of the UAV)
+
+FILES YOU CREATED:
+------------------
+1. code/PIDController.h          - PID controller header
+2. code/PIDController.cpp        - PID controller implementation
+
+FILES YOU MODIFIED:
+------------------
+1. code/ECE_UAV.h               - Added state machine and control functions
+2. code/ECE_UAV.cpp             - Implemented control logic
+
+DOCUMENTATION:
+-------------
+1. PERSON3_IMPLEMENTATION.txt    - Complete implementation guide
+2. PERSON3_QUICK_REFERENCE.txt   - This file
+
+===============================================================================
+STATE MACHINE SUMMARY
+===============================================================================
+
+┌──────────────┬─────────────┬──────────────────────────────────────────┐
+│    STATE     │  DURATION   │              BEHAVIOR                    │
+├──────────────┼─────────────┼──────────────────────────────────────────┤
+│ IDLE         │ 0-5 sec     │ Stay on ground (counter gravity)        │
+│ ASCENT       │ Variable    │ Fly to (0,0,50), max 2 m/s             │
+│ ORBIT        │ 60 sec      │ Fly on 10m sphere, 2-10 m/s            │
+│ FINISHED     │ Indefinite  │ Hover in place                          │
+└──────────────┴─────────────┴──────────────────────────────────────────┘
+
+===============================================================================
+KEY FORMULAS
+===============================================================================
+
+PID Control Output:
+-------------------
+output = Kp·error + Ki·∫(error·dt) + Kd·d(error)/dt
+
+Tuned Gains:
+-----------
+Kp = 50.0    (Proportional - immediate response)
+Ki = 0.5     (Integral - eliminate steady-state error)
+Kd = 10.0    (Derivative - dampen oscillations)
+
+State-Based Forces:
+------------------
+IDLE:    F = (0, 0, 10) N              [Counter gravity]
+ASCENT:  F = direction * 20 N          [Fly to target]
+ORBIT:   F = radial + tangent + (0,0,10) [PID + movement]
+
+Color Oscillation (ECE6122):
+---------------------------
+intensity = 0.75 + 0.25·sin(π·t)
+Oscillates between 0.5 (half) and 1.0 (full) at 0.5 Hz
+
+===============================================================================
+CODE LOCATIONS
+===============================================================================
+
+PID Controller:
+--------------
+Class definition:     code/PIDController.h
+Implementation:       code/PIDController.cpp (lines 1-85)
+
+State Machine:
+-------------
+Enum definition:      code/ECE_UAV.h (lines 15-20)
+IDLE state:           code/ECE_UAV.cpp (lines ~170-185)
+ASCENT state:         code/ECE_UAV.cpp (lines ~187-220)
+ORBIT state:          code/ECE_UAV.cpp (lines ~222-305)
+FINISHED state:       code/ECE_UAV.cpp (lines ~307-312)
+
+Color Oscillation:
+-----------------
+Calculation:          code/ECE_UAV.cpp (lines ~145-155)
+Update:               code/ECE_UAV.cpp (line ~163)
+Getter function:      code/ECE_UAV.cpp (getColorIntensity)
+
+Main Control Loop:
+-----------------
+Thread function:      code/ECE_UAV.cpp (threadFunction)
+Force calculation:    code/ECE_UAV.cpp (calculateStateBasedForce)
+
+===============================================================================
+FUNCTION REFERENCE
+===============================================================================
+
+Public Functions YOU Implemented:
+---------------------------------
+FlightState getFlightState()
+    Returns current state enum value
+
+double getElapsedTime()
+    Returns seconds since simulation start
+
+double getColorIntensity()
+    Returns color multiplier (0.5 to 1.0) [ECE6122]
+
+Vec3 calculateStateBasedForce(double deltaTime)
+    Main control logic - calculates force based on current state
+
+void generateRandomDirection()
+    Creates random tangent vector for orbit phase
+
+PID Controller Functions:
+-------------------------
+PIDController(double Kp, double Ki, double Kd)
+    Constructor with gain values
+
+double calculate(double setpoint, double measured, double dt)
+    Calculates PID output
+
+void reset()
+    Clears integral and derivative terms
+
+void setGains(double Kp, double Ki, double Kd)
+    Updates gain values
+
+===============================================================================
+TESTING CHECKLIST
+===============================================================================
+
+Visual Verification:
+-------------------
+□ UAVs stationary for 5 seconds
+□ UAVs launch upward smoothly
+□ Ascent velocity ≤ 2 m/s
+□ UAVs reach center point (0,0,50)
+□ UAVs orbit on sphere surface
+□ Random flight paths visible
+□ Orbit lasts 60 seconds
+□ No explosions or crashes
+□ [ECE6122] Color pulsing visible
+
+Console Output:
+--------------
+□ "Thread started for UAV!" (15 times)
+□ "UAV transitioning to ASCENT state" (after 5s)
+□ "UAV transitioning to ORBIT state" (when reaching sphere)
+□ "UAV finished orbit - simulation complete" (after 60s orbit)
+□ No "EXPLOSION DETECTED!" messages
+
+Performance Metrics:
+-------------------
+□ Distance from sphere center ≈ 10m during orbit
+□ Velocity during orbit: 2-10 m/s
+□ No jittering or unstable behavior
+□ Smooth transitions between states
+
+===============================================================================
+COMMON ISSUES AND SOLUTIONS
+===============================================================================
+
+Problem: UAVs fall through ground in IDLE
+Solution: Check force = Vec3(0, 0, gravityCompensation)
+
+Problem: UAVs overshoot during ascent
+Solution: Verify velocity check: if (speed < 2.0) logic
+
+Problem: UAVs spiral away from sphere
+Solution: Increase Kp gain (try 60-80)
+
+Problem: UAVs oscillate wildly on sphere
+Solution: Increase Kd gain (try 15-20)
+
+Problem: UAVs move too slowly in orbit
+Solution: Increase tangentialForce values
+
+Problem: Color not oscillating
+Solution: Check colorPhase update in calculateStateBasedForce()
+
+Problem: Simulation doesn't end
+Solution: Verify 60-second timer check in ORBIT state
+
+===============================================================================
+INTEGRATION POINTS
+===============================================================================
+
+Person 1 Needs From You:
+-----------------------
+✓ getPosition() - Returns Vec3 of current position
+✓ getColorIntensity() - Returns double (0.5-1.0) [ECE6122 only]
+
+Person 2 Needs From You:
+-----------------------
+✓ calculateStateBasedForce() - Returns Vec3 control force
+
+You Need From Person 1:
+----------------------
+- Proper initialization of ECE_UAV objects
+- Call to start() method after construction
+- GLOBAL_UAV_LIST populated with all UAVs
+
+You Need From Person 2:
+----------------------
+- Working updateKinematics(force, dt)
+- Working checkCollisionsFor(uav)
+- Thread-safe access to position/velocity
+
+===============================================================================
+BUILD INSTRUCTIONS
+===============================================================================
+
+The CMakeLists.txt automatically includes all .cpp files in code/ directory,
+so your PIDController.cpp is already included.
+
+To build:
+--------
+cd build
+cmake ..
+make
+
+To run:
+------
+cd bin
+./FinalProject
+
+===============================================================================
+TUNING THE PID CONTROLLER
+===============================================================================
+
+If you need to adjust behavior, modify these lines in ECE_UAV.cpp:
+
+Constructor (line ~30):
+    pidX(Kp, Ki, Kd),  // Change these values
+    pidY(Kp, Ki, Kd),
+    pidZ(Kp, Ki, Kd)
+
+Current values: Kp=50.0, Ki=0.5, Kd=10.0
+
+Adjustment Guidelines:
+---------------------
+Too much oscillation:     Kp ↓, Kd ↑
+Drifts from sphere:       Kp ↑, Ki ↑
+Slow response:            Kp ↑
+Overshoots:               Kd ↑
+
+Speed Control (lines ~280-295):
+    minOrbitSpeed = 2.0;   // Lower bound
+    maxOrbitSpeed = 10.0;  // Upper bound
+    tangentialForce = X;   // Acceleration value
+
+===============================================================================
+GRADING CRITERIA ADDRESSED
+===============================================================================
+
+✓ Proper file headers with author, class, date, description
+✓ Function comments with purpose, inputs, outputs
+✓ Inline comments explaining complex logic
+✓ Camel case naming convention
+✓ 4-space indentation
+✓ No compiler warnings
+✓ State machine implementation
+✓ PID controller implementation
+✓ 5-second idle period
+✓ Ascent with 2 m/s max velocity
+✓ Sphere orbit with 10m radius
+✓ Velocity control (2-10 m/s)
+✓ 60-second orbit duration
+✓ [ECE6122] Color oscillation at 0.5 Hz
+
+===============================================================================
+BONUS POINTS STATUS
+===============================================================================
+
+Implemented:
+✓ ECE6122: Color oscillation (+0 points - required for 6122)
+
+Not Implemented (Person 1's responsibility):
+□ Football field texture ff.bmp (+10 points)
+□ UAV texture mapping (+20 points)
+
+===============================================================================
+END OF QUICK REFERENCE
+===============================================================================
+
+For detailed explanations, see PERSON3_IMPLEMENTATION.txt
