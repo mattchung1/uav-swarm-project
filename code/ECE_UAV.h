@@ -8,8 +8,19 @@ Header file for ECE_UAV class
 #include <thread>
 #include <atomic>
 #include <mutex>
+#include <chrono>
 #include "Vec3.h"
 #include "PhysicsGlobals.h"
+#include "PIDController.h"
+
+// Flight state enumeration for state machine
+enum class FlightState 
+{
+    IDLE,       // 0-5 seconds: Remain on ground
+    ASCENT,     // Launch phase: Fly to (0,0,50) with max velocity 2 m/s
+    ORBIT,      // Orbit phase: Fly on sphere surface for 60 seconds
+    FINISHED    // Simulation complete
+};
 
 class ECE_UAV 
 {
@@ -39,6 +50,32 @@ class ECE_UAV
 
         // Mutex for thread-safe access to kinematic data
         mutable std::mutex dataMutex;
+        
+        // ===== PERSON 3: FLIGHT CONTROL STATE MACHINE =====
+        // Current flight state
+        FlightState currentState;
+        
+        // Timing variables
+        std::chrono::steady_clock::time_point startTime;
+        std::chrono::steady_clock::time_point orbitStartTime;
+        
+        // PID controllers for sphere orbit (one per axis)
+        PIDController pidX;
+        PIDController pidY;
+        PIDController pidZ;
+        
+        // Target point for ascent phase
+        Vec3 targetPoint;
+        
+        // Sphere center and radius for orbit phase
+        Vec3 sphereCenter;
+        double sphereRadius;
+        
+        // Random velocity direction for orbit
+        Vec3 randomDirection;
+        
+        // Color oscillation (ECE6122 requirement)
+        double colorPhase;
 
     public:
         /*
@@ -96,6 +133,37 @@ class ECE_UAV
 
         // Reset controllers
         void resetControllers();
+        
+        // ===== PERSON 3: STATE MACHINE CONTROL =====
+        /*
+        Get current flight state
+        Output: Current FlightState enum value
+        */
+        FlightState getFlightState();
+        
+        /*
+        Get elapsed time since simulation start
+        Output: Time in seconds
+        */
+        double getElapsedTime();
+        
+        /*
+        Get color oscillation value for ECE6122 requirement
+        Output: Value between 0.5 and 1.0 for color intensity
+        */
+        double getColorIntensity();
+        
+        /*
+        Calculate control force based on current flight state
+        Input: deltaTime - time step for PID calculations
+        Output: Force vector to apply to UAV
+        */
+        Vec3 calculateStateBasedForce(double deltaTime);
+        
+        /*
+        Generate random direction for orbit phase
+        */
+        void generateRandomDirection();
 
 };
 
