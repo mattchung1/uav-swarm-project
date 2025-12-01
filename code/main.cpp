@@ -116,21 +116,43 @@ int main( void )
 	GLint uSolidAlpha = glGetUniformLocation(programID, "solidAlpha");
 	GLint uColorIntensityLoc = glGetUniformLocation(programID, "uColorIntensity");
 
-	// Load the texture with multiple fallbacks (DDS -> stb -> JPG -> legacy)
-	GLuint Texture = loadDDS("assets/textures/txtr01.DDS");
-	if (!Texture) {
-		Texture = loadTextureWithStb("assets/textures/txtr01.DDS");
+	// Load UAV textures for each model group with sensible fallbacks
+	GLuint texture0 = loadDDS("assets/textures/txtr01.DDS");
+	if (!texture0) {
+		texture0 = loadTextureWithStb("assets/textures/txtr01.DDS");
 	}
-	if (!Texture) {
-		Texture = loadTextureWithStb("assets/textures/txtr01.jpg");
+	if (!texture0) {
+		texture0 = loadTextureWithStb("assets/textures/txtr01.jpg");
 	}
-	if (!Texture) {
-		fprintf(stderr, "Failed to load new texture; falling back to assets/textures/cat.DDS.\n");
-		Texture = loadDDS("assets/textures/cat.DDS");
+	if (!texture0) {
+		fprintf(stderr, "Failed to load txtr01; falling back to assets/textures/cat.DDS.\n");
+		texture0 = loadDDS("assets/textures/cat.DDS");
 	}
-	if (!Texture) {
-		fprintf(stderr, "Unable to load any UAV texture.\n");
+	if (!texture0) {
+		fprintf(stderr, "Unable to load any UAV texture for group 0.\n");
 		return -1;
+	}
+
+	GLuint texture1 = loadDDS("assets/textures/uvmap.DDS");
+	if (!texture1) {
+		texture1 = loadTextureWithStb("assets/textures/uvmap.DDS");
+	}
+	if (!texture1) {
+		texture1 = loadTextureWithStb("assets/textures/uvmap.jpg");
+	}
+	if (!texture1) {
+		fprintf(stderr, "Failed to load uvmap; falling back to txtr01/cat for group 1.\n");
+		texture1 = texture0; // fallback to texture0 which has valid content
+	}
+
+	GLuint texture2 = loadTextureWithStb("assets/textures/txtr02.jpg");
+	if (!texture2) {
+		// Try a DDS or fallback to texture0/cat
+		texture2 = loadDDS("assets/textures/txtr02.DDS");
+	}
+	if (!texture2) {
+		fprintf(stderr, "Failed to load txtr02.jpg; falling back to txtr01/cat for group 2.\n");
+		texture2 = texture0;
 	}
 
 	// Load floor texture
@@ -149,76 +171,131 @@ int main( void )
 	GLuint TextureID  = glGetUniformLocation(programID, "myTextureSampler");
 	GLint uColorIntensityID = glGetUniformLocation(programID, "uColorIntensity");
 
-	// Bind our texture in Texture Unit 0
-	glUseProgram(programID);        
-	glUniform1i(TextureID, 0);    
+	// Bind our default texture in Texture Unit 0 (unimportant; we'll bind per-model later)
+	glUseProgram(programID);
+	glUniform1i(TextureID, 0);
 	glUniform1f(uColorIntensityID, 1.0f);
 
 
 
 
-	// Read our .obj file
-	std::vector<glm::vec3> vertices;
-	std::vector<glm::vec2> uvs;
-	std::vector<glm::vec3> normals;
-	bool res = loadOBJ("assets/models/chicken_01.obj", vertices, uvs, normals);
+	// Generic model resources container
+	struct ModelResources {
+		GLuint vbo = 0;
+		GLuint uvbo = 0;
+		GLuint nbo = 0;
+		GLuint ebo = 0;
+		std::vector<unsigned short> idx;
+		float scale = 1.0f;
+	};
 
-	std::vector<unsigned short> indices;
-	std::vector<glm::vec3> indexed_vertices;
-	std::vector<glm::vec2> indexed_uvs;
-	std::vector<glm::vec3> indexed_normals;
-	indexVBO(vertices, uvs, normals, indices, indexed_vertices, indexed_uvs, indexed_normals);
-
-		// Compute bounding box of the UAV model to derive a consistent scale factor
-		glm::vec3 minBounds(std::numeric_limits<float>::max());
-		glm::vec3 maxBounds(std::numeric_limits<float>::lowest());
-		for (const glm::vec3& v : indexed_vertices)
-		{
-			minBounds.x = std::min(minBounds.x, v.x);
-			minBounds.y = std::min(minBounds.y, v.y);
-			minBounds.z = std::min(minBounds.z, v.z);
-
-			maxBounds.x = std::max(maxBounds.x, v.x);
-			maxBounds.y = std::max(maxBounds.y, v.y);
-			maxBounds.z = std::max(maxBounds.z, v.z);
+	auto loadIndexed = [](const char* path,
+						  std::vector<glm::vec3>& outVerts,
+						  std::vector<glm::vec2>& outUVs,
+						  std::vector<glm::vec3>& outNormals,
+						  std::vector<unsigned short>& outIdx,
+						  std::vector<glm::vec3>& outIndexedVerts) -> bool {
+		std::vector<glm::vec3> v;
+		std::vector<glm::vec2> u;
+		std::vector<glm::vec3> n;
+		if (!loadOBJ(path, v, u, n)) {
+			fprintf(stderr, "Failed to load %s\n", path);
+			return false;
 		}
+		indexVBO(v, u, n, outIdx, outIndexedVerts, outUVs, outNormals);
+		outVerts.swap(v);
+		return true;
+	};
 
-		const float extentX = maxBounds.x - minBounds.x;
-		const float extentY = maxBounds.y - minBounds.y;
-		const float extentZ = maxBounds.z - minBounds.z;
-		const float maxExtent = std::max(std::max(extentX, extentY), extentZ);
+	// Load three models: UAV1, UAV2, UAV3
+	std::vector<glm::vec3> uav1Verts, uav1IndexedVerts; // first 5
+	std::vector<glm::vec2> uav1UVs;
+	std::vector<glm::vec3> uav1Normals;
+	std::vector<unsigned short> uav1Idx;
+	if (!loadIndexed("assets/models/suzanne.obj", uav1Verts, uav1UVs, uav1Normals, uav1Idx, uav1IndexedVerts)) {
+		return -1;
+	}
 
+	std::vector<glm::vec3> uav2Verts, uav2IndexedVerts; // next 5
+	std::vector<glm::vec2> uav2UVs;
+	std::vector<glm::vec3> uav2Normals;
+	std::vector<unsigned short> uav2Idx;
+	if (!loadIndexed("assets/models/cube.obj", uav2Verts, uav2UVs, uav2Normals, uav2Idx, uav2IndexedVerts)) {
+		return -1;
+	}
+
+	std::vector<glm::vec3> uav3Verts, uav3IndexedVerts; // last 5
+	std::vector<glm::vec2> uav3UVs;
+	std::vector<glm::vec3> uav3Normals;
+	std::vector<unsigned short> uav3Idx;
+	if (!loadIndexed("assets/models/chicken_01.obj", uav3Verts, uav3UVs, uav3Normals, uav3Idx, uav3IndexedVerts)) {
+		return -1;
+	}
+
+		// Set physics collision radius target to match rendered drone size
 		const float desiredBoundingBoxMeters = 0.2f; // Physical requirement (20 cm cube)
-		const float visualScaleMultiplier = 5.0f;     // Make it look bigger for visibility
-		const float baseScale = maxExtent > 0.0f ? desiredBoundingBoxMeters / maxExtent : 1.0f;
-		const float uavScale = baseScale * visualScaleMultiplier;
+		const float visualScaleMultiplier = 10.0f;   // Visibility multiplier
 		const float uavBoundingRadiusMeters = 0.5f * desiredBoundingBoxMeters * visualScaleMultiplier;
 
 		// Update physics collision radius to match rendered drone size
 		setUAVBoundingRadius(uavBoundingRadiusMeters);
 
-	// Load it into a VBO
+	// (Legacy single-model buffers removed; using generic model groups below)
 
-	GLuint vertexbuffer;
-	glGenBuffers(1, &vertexbuffer);
-	glBindBuffer(GL_ARRAY_BUFFER, vertexbuffer);
-	glBufferData(GL_ARRAY_BUFFER, indexed_vertices.size() * sizeof(glm::vec3), &indexed_vertices[0], GL_STATIC_DRAW);
+	// Build buffers for three UAV model groups
+	ModelResources models[3];
 
-	GLuint uvbuffer;
-	glGenBuffers(1, &uvbuffer);
-	glBindBuffer(GL_ARRAY_BUFFER, uvbuffer);
-	glBufferData(GL_ARRAY_BUFFER, indexed_uvs.size() * sizeof(glm::vec2), &indexed_uvs[0], GL_STATIC_DRAW);
+	auto uploadBuffers = [](ModelResources& mr,
+							const std::vector<glm::vec3>& verts,
+							const std::vector<glm::vec2>& uvs,
+							const std::vector<glm::vec3>& norms,
+							const std::vector<unsigned short>& idx) {
+		glGenBuffers(1, &mr.vbo);
+		glBindBuffer(GL_ARRAY_BUFFER, mr.vbo);
+		glBufferData(GL_ARRAY_BUFFER, verts.size() * sizeof(glm::vec3), &verts[0], GL_STATIC_DRAW);
 
-	GLuint normalbuffer;
-	glGenBuffers(1, &normalbuffer);
-	glBindBuffer(GL_ARRAY_BUFFER, normalbuffer);
-	glBufferData(GL_ARRAY_BUFFER, indexed_normals.size() * sizeof(glm::vec3), &indexed_normals[0], GL_STATIC_DRAW);
+		glGenBuffers(1, &mr.uvbo);
+		glBindBuffer(GL_ARRAY_BUFFER, mr.uvbo);
+		glBufferData(GL_ARRAY_BUFFER, uvs.size() * sizeof(glm::vec2), &uvs[0], GL_STATIC_DRAW);
 
-	// Generate a buffer for the indices as well
-	GLuint elementbuffer;
-	glGenBuffers(1, &elementbuffer);
-	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, elementbuffer);
-	glBufferData(GL_ELEMENT_ARRAY_BUFFER, indices.size() * sizeof(unsigned short), &indices[0] , GL_STATIC_DRAW);
+		glGenBuffers(1, &mr.nbo);
+		glBindBuffer(GL_ARRAY_BUFFER, mr.nbo);
+		glBufferData(GL_ARRAY_BUFFER, norms.size() * sizeof(glm::vec3), &norms[0], GL_STATIC_DRAW);
+
+		glGenBuffers(1, &mr.ebo);
+		glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, mr.ebo);
+		glBufferData(GL_ELEMENT_ARRAY_BUFFER, idx.size() * sizeof(unsigned short), &idx[0], GL_STATIC_DRAW);
+		mr.idx = idx;
+	};
+
+	uploadBuffers(models[0], uav1IndexedVerts, uav1UVs, uav1Normals, uav1Idx);
+	uploadBuffers(models[1], uav2IndexedVerts, uav2UVs, uav2Normals, uav2Idx);
+	uploadBuffers(models[2], uav3IndexedVerts, uav3UVs, uav3Normals, uav3Idx);
+
+	// Compute per-model scales to match the same physical target
+	auto computeScale = [](const std::vector<glm::vec3>& indexedVerts) -> float {
+		glm::vec3 minB(std::numeric_limits<float>::max());
+		glm::vec3 maxB(std::numeric_limits<float>::lowest());
+		for (const auto& v : indexedVerts) {
+			minB.x = std::min(minB.x, v.x);
+			minB.y = std::min(minB.y, v.y);
+			minB.z = std::min(minB.z, v.z);
+			maxB.x = std::max(maxB.x, v.x);
+			maxB.y = std::max(maxB.y, v.y);
+			maxB.z = std::max(maxB.z, v.z);
+		}
+		float ex = maxB.x - minB.x, ey = maxB.y - minB.y, ez = maxB.z - minB.z;
+		float m = std::max(std::max(ex, ey), ez);
+		const float desiredBoundingBoxMeters = 0.2f;
+		const float visualScaleMultiplier = 10.0f;
+		const float base = m > 0.0f ? desiredBoundingBoxMeters / m : 1.0f;
+		return base * visualScaleMultiplier;
+	};
+
+	// Compute each model's scale so all share the same physical size
+	models[0].scale = computeScale(uav1IndexedVerts);
+	models[1].scale = computeScale(uav2IndexedVerts);
+	models[2].scale = computeScale(uav3IndexedVerts);
 
 	// Get a handle for our "LightPosition" uniform
 	glUseProgram(programID);
@@ -494,17 +571,15 @@ int main( void )
 
 		glUseProgram(programID);
 
-		// Bind our texture in Texture Unit 0
-		glActiveTexture(GL_TEXTURE0);
-		glBindTexture(GL_TEXTURE_2D, Texture);
-		// Set our "myTextureSampler" sampler to use Texture Unit 0
-		glUniform1i(TextureID, 0);
+		// We'll bind textures per-model inside the draw loop (group-dependent)
 
 		// Precompute orientation and scale so each UAV stands upright and matches physics bounds
 		const glm::mat4 uavOrientation = glm::rotate(glm::mat4(1.0f), glm::radians(90.0f), glm::vec3(1.0f, 0.0f, 0.0f));
-		const glm::vec3 uavScaleVec(uavScale);
 
-		// For loop to draw the UAVs
+		// Z-axis spin angle based on time
+		float spinAngle = glm::radians(fmod(currentTime * 360.0, 360.0)); // 50 degrees per second
+
+		// For loop to draw the UAVs (first 5 replaced by UAV2: suzanne)
 		for (int object = 0; object < numberUAVs; ++object)
 		{
 			// Get current position from UAV thread
@@ -514,15 +589,19 @@ int main( void )
 			y = currentPos[object].y;
 			z = currentPos[object].z;
 			
+			// Select which model group this UAV belongs to: 0 (0-4), 1 (5-9), 2 (10-14)
+			int group = (object < 5) ? 0 : (object < 10) ? 1 : 2;
+			const ModelResources& mr = models[group];
 
 			// define model matrix and parameters
 			modelMatrices[object] = glm::mat4(1.0);
 			float colorIntensity = static_cast<float>(uavs[object]->getColorIntensity());
 			glUniform1f(uColorIntensityLoc, colorIntensity);
-			// Translate to UAV position, then orient upright and scale down
+			// Translate to UAV position, then orient upright, spin around Z-axis, and scale down with per-model scale
 			modelMatrices[object] = glm::translate(modelMatrices[object], glm::vec3((float)x, (float)y, (float)z));
 			modelMatrices[object] = modelMatrices[object] * uavOrientation;
-			modelMatrices[object] = glm::scale(modelMatrices[object], uavScaleVec);
+			modelMatrices[object] = glm::rotate(modelMatrices[object], spinAngle, glm::vec3(0.0f, 1.0f, 0.0f));
+			modelMatrices[object] = glm::scale(modelMatrices[object], glm::vec3(mr.scale));
 
 			// Update MVP matrix
 			MVPMatrices[object] = ProjectionMatrix * ViewMatrix * modelMatrices[object];
@@ -530,28 +609,32 @@ int main( void )
 			glUniformMatrix4fv(MatrixID, 1, GL_FALSE, &MVPMatrices[object][0][0]);
 			glUniformMatrix4fv(ModelMatrixID, 1, GL_FALSE, &modelMatrices[object][0][0]);
 
-			// The rest is exactly the same as the first object
-		
 			// 1rst attribute buffer : vertices
 			glEnableVertexAttribArray(0);
-			glBindBuffer(GL_ARRAY_BUFFER, vertexbuffer);
+			glBindBuffer(GL_ARRAY_BUFFER, mr.vbo);
 			glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 0, (void*)0);
 
 			// 2nd attribute buffer : UVs
 			glEnableVertexAttribArray(1);
-			glBindBuffer(GL_ARRAY_BUFFER, uvbuffer);
+			glBindBuffer(GL_ARRAY_BUFFER, mr.uvbo);
 			glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 0, (void*)0);
 
 			// 3rd attribute buffer : normals
 			glEnableVertexAttribArray(2);
-			glBindBuffer(GL_ARRAY_BUFFER, normalbuffer);
+			glBindBuffer(GL_ARRAY_BUFFER, mr.nbo);
 			glVertexAttribPointer(2, 3, GL_FLOAT, GL_FALSE, 0, (void*)0);
 
 			// Index buffer
-			glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, elementbuffer);
+			glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, mr.ebo);
+
+			// Bind texture for this model group
+			GLuint boundTex = (group == 0) ? texture0 : (group == 1) ? texture1 : texture2;
+			glActiveTexture(GL_TEXTURE0);
+			glBindTexture(GL_TEXTURE_2D, boundTex);
+			glUniform1i(TextureID, 0);
 
 			// Draw the triangles !
-			glDrawElements(GL_TRIANGLES, indices.size(), GL_UNSIGNED_SHORT, (void*)0);
+			glDrawElements(GL_TRIANGLES, mr.idx.size(), GL_UNSIGNED_SHORT, (void*)0);
 		}
 
 		/////// END OF NEW MATRIX //////////
@@ -615,12 +698,23 @@ int main( void )
 	}
 
 	// Cleanup VBO and shader
-	glDeleteBuffers(1, &vertexbuffer);
-	glDeleteBuffers(1, &uvbuffer);
-	glDeleteBuffers(1, &normalbuffer);
-	glDeleteBuffers(1, &elementbuffer);
+	// Cleanup buffers for all model groups
+	glDeleteBuffers(1, &models[0].vbo);
+	glDeleteBuffers(1, &models[0].uvbo);
+	glDeleteBuffers(1, &models[0].nbo);
+	glDeleteBuffers(1, &models[0].ebo);
+	glDeleteBuffers(1, &models[1].vbo);
+	glDeleteBuffers(1, &models[1].uvbo);
+	glDeleteBuffers(1, &models[1].nbo);
+	glDeleteBuffers(1, &models[1].ebo);
+	glDeleteBuffers(1, &models[2].vbo);
+	glDeleteBuffers(1, &models[2].uvbo);
+	glDeleteBuffers(1, &models[2].nbo);
+	glDeleteBuffers(1, &models[2].ebo);
 	glDeleteProgram(programID);
-	glDeleteTextures(1, &Texture);
+	glDeleteTextures(1, &texture0);
+	glDeleteTextures(1, &texture1);
+	glDeleteTextures(1, &texture2);
 	glDeleteVertexArrays(1, &VertexArrayID);
 
 	// Close OpenGL window and terminate GLFW
