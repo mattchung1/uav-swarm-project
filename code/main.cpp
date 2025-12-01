@@ -4,6 +4,16 @@ Class: ECE 6122
 Last Date Modified: November 30th, 2025
 Description: Final Project
 
+Project Statement of work:
+After completing the default final project together as a group, we later realized that it was supposed to be a project completed individually. We 
+incorrectly assumed that both the default and custom final projects could be completed either as groups or as an individual. As per an email with Prof. Hurley, 
+we compromised by adding more complexity to the default final project and submitting it as a group. The added complexity is as follows:
+
+1. Each UAV outputs a colored trail
+2. Three different UAV types with unique textures
+3. Spinning UAVs
+4. Keyboard controls
+
 */
 
 #include <stdio.h>
@@ -36,6 +46,17 @@ using namespace glm;
 #include "Vec3.h"
 #include "PhysicsGlobals.h"
 
+// Adding function for window resize
+void framebuffer_size_callback(GLFWwindow* window, int width, int height)
+{
+    // Prevent a divide by zero if the window is too small
+    if (height == 0) height = 1;
+    
+    // Tell OpenGL to use the full window
+    glViewport(0, 0, width, height);
+}
+
+
 int main( void )
 {
 	// Initialize GLFW
@@ -61,6 +82,9 @@ int main( void )
 		return -1;
 	}
 	glfwMakeContextCurrent(window);
+
+	// Frame resize callback
+	glfwSetFramebufferSizeCallback(window, framebuffer_size_callback);
     
 	// Initialize GLEW
 	glewExperimental = true; // Needed for core profile
@@ -524,6 +548,8 @@ int main( void )
 
 		// Compute the MVP matrix from keyboard and mouse input
 		computeMatricesFromInputs();
+
+
 		glm::mat4 ProjectionMatrix = getProjectionMatrix();
 		glm::mat4 ViewMatrix = getViewMatrix();
 		
@@ -670,58 +696,65 @@ int main( void )
 			GL_FALSE, 		// Transpose
 			&MVP[0][0]);	// Pointer to first element
 
+
+		glUniformMatrix4fv(ModelMatrixID, 1, GL_FALSE, &Identity[0][0]);
+
 		// Set color of trails
-		glUniform1i(uUseSolid, GL_TRUE);
-		glUniform3f(uSolidColor, 1.0f, 1.0f, 1.0f); // White trails
-        glUniform1f(uSolidAlpha, 1.0f);
+		glUniform1i(uUseSolid, GL_FALSE);
+        glUniform1f(uColorIntensityLoc, 1.0f);
 
-		// Flatter into 2D vector
-		std::vector<glm::vec3> allTrailVerts;
-
-		// Record first and end for each strip
-		std::vector<int> stripCounts; 
-        std::vector<int> stripFirsts;
-        int currentStartIndex = 0;
+		// Make normals constant up
+		glDisableVertexAttribArray(2);
+        glVertexAttrib3f(2, 0.0f, 0.0f, 1.0f);
 
 		// Create line segments for each trail
-		for(int i=0; i<numberUAVs; i++) {
+		for(int i=0; i<numberUAVs; i++) 
+		{
             if(uavTrails[i].size() < 2) continue; // Need 2 points to make a line
 
-            // Copy points to the flat buffer
-            allTrailVerts.insert(allTrailVerts.end(), uavTrails[i].begin(), uavTrails[i].end());
-            
-            // Record the draw command info
-            stripFirsts.push_back(currentStartIndex);
-            stripCounts.push_back(uavTrails[i].size());
-            currentStartIndex += uavTrails[i].size();
-        }
+			// Determine which texture to use based on UAV group
+            int group = (i < 5) ? 0 : (i < 10) ? 1 : 2;
+            GLuint boundTex = (group == 0) ? texture0 : (group == 1) ? texture1 : texture2;
 
-		// Upload to VBO
-		if (allTrailVerts.size() > 0) {
-            // Send to GPU (Dynamic Draw because it changes every frame)
-            glEnableVertexAttribArray(0);
+			// Bind those textures
+			glActiveTexture(GL_TEXTURE0);
+            glBindTexture(GL_TEXTURE_2D, boundTex);
+            glUniform1i(TextureID, 0);
+
+			// Create vectors for line segments
+			std::vector<glm::vec3> trailVerts;
+            std::vector<glm::vec2> trailUVs;
+
+			// Populate trail positions and UV vectors
+			for (size_t k = 0; k < uavTrails[i].size(); k++) 
+			{
+				// Position
+				trailVerts.push_back(uavTrails[i][k]);
+
+				// Generate UVs
+				float u = (float)k / (float)(uavTrails[i].size() - 1);
+                trailUVs.push_back(glm::vec2(u, 0.5f));
+			}
+
+			// Generate vertices
+			glEnableVertexAttribArray(0);
             glBindBuffer(GL_ARRAY_BUFFER, trailVBO);
-            glBufferData(
-				GL_ARRAY_BUFFER, 							// Target
-				allTrailVerts.size() * sizeof(glm::vec3), 	// Size in bytes
-				&allTrailVerts[0], 							// Pointer to data
-				GL_DYNAMIC_DRAW);							// Usage
-            glVertexAttribPointer(
-				0, 			// layout match to shader
-				3, 			// size
-				GL_FLOAT, 	// type
-				GL_FALSE, 	// normalized
-				0, 			// stride
-				(void*)0);	// array buffer offset
+            glBufferData(GL_ARRAY_BUFFER, trailVerts.size() * sizeof(glm::vec3), &trailVerts[0], GL_DYNAMIC_DRAW);
+            glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 0, (void*)0);
 
-            // Disable UVs and Normals for lines (not needed)
-            glDisableVertexAttribArray(1);
-            glDisableVertexAttribArray(2);
+			// Generate UVs
+			GLuint trailUVBuffer; 
+            glGenBuffers(1, &trailUVBuffer);
+            glEnableVertexAttribArray(1);
+            glBindBuffer(GL_ARRAY_BUFFER, trailUVBuffer);
+            glBufferData(GL_ARRAY_BUFFER, trailUVs.size() * sizeof(glm::vec2), &trailUVs[0], GL_DYNAMIC_DRAW);
+            glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 0, (void*)0);
 
-            // Draw each line strip
-            for(size_t k=0; k<stripCounts.size(); k++) {
-                glDrawArrays(GL_LINE_STRIP, stripFirsts[k], stripCounts[k]);
-            }
+			// Draw line strip
+			glDrawArrays(GL_LINE_STRIP, 0, trailVerts.size());
+			
+			// Clean up temporary UV buffer
+			glDeleteBuffers(1, &trailUVBuffer);
         }
 
 		/////// END OF LIGHT TRAILS //////////

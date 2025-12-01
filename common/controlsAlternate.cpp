@@ -97,7 +97,12 @@ void computeMatricesFromInputs(){
 	phi = glm::clamp(phi, -89.9f, 89.9f);
     if (radius < 1.0f)  radius = 1.0f;
 
-	ProjectionMatrix = glm::perspective(glm::radians(FoV), 4.0f / 3.0f, 0.1f, 1000.0f);
+	// Get the current window size
+	int width, height;
+    glfwGetWindowSize(window, &width, &height);
+	if (height == 0) height = 1;
+
+	ProjectionMatrix = glm::perspective(glm::radians(FoV), (float)width / (float)height, 0.1f, 1000.0f);
 	
 	float x,y,z;
 
