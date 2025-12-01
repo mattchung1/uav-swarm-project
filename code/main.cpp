@@ -4,6 +4,16 @@ Class: ECE 6122
 Last Date Modified: November 30th, 2025
 Description: Final Project
 
+Project Statement of work:
+After completing the default final project together as a group, we later realized that it was supposed to be a project completed individually. We 
+incorrectly assumed that both the default and custom final projects could be completed either as groups or as an individual. As per an email with Prof. Hurley, 
+we compromised by adding more complexity to the default final project and submitting it as a group. The added complexity is as follows:
+
+1. Each UAV outputs a colored trail
+2. Three different UAV types with unique textures
+3. Spinning UAVs
+4. Keyboard controls
+
 */
 
 #include <stdio.h>
@@ -539,11 +549,6 @@ int main( void )
 		// Compute the MVP matrix from keyboard and mouse input
 		computeMatricesFromInputs();
 
-		// Get the current window size
-		int width, height;
-        glfwGetWindowSize(window, &width, &height);
-		if (height == 0) height = 1;
-
 
 		glm::mat4 ProjectionMatrix = getProjectionMatrix();
 		glm::mat4 ViewMatrix = getViewMatrix();
@@ -690,6 +695,9 @@ int main( void )
 			1, 				// Number of matrices
 			GL_FALSE, 		// Transpose
 			&MVP[0][0]);	// Pointer to first element
+
+
+		glUniformMatrix4fv(ModelMatrixID, 1, GL_FALSE, &Identity[0][0]);
 
 		// Set color of trails
 		glUniform1i(uUseSolid, GL_FALSE);
