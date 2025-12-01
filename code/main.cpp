@@ -237,6 +237,12 @@ int main( void )
 	std::vector<glm::mat4> modelMatrices(numberUAVs);
 	std::vector<glm::mat4> MVPMatrices(numberUAVs);
 
+	// Trail colors initialization
+	const int TRAIL_LENGTH = 100;
+	std::vector<std::vector<glm::vec3>> uavTrails(numberUAVs);
+	GLuint trailVBO;
+	glGenBuffers(1, &trailVBO);
+
 	// Create 15 ECE_UAV objects placed on football yard lines using a 3x5 grid
 	std::vector<ECE_UAV*> uavs;
 	GLOBAL_UAV_LIST = &uavs;
@@ -410,7 +416,18 @@ int main( void )
 			// Update positions from UAV threads and check completion state
 			bool allFinished = true;
 			for (int i = 0; i < numberUAVs; ++i) {
-				currentPos[i] = uavs[i]->getPosition();
+				Vec3 p = uavs[i]->getPosition();
+				currentPos[i] = p; // Store position for light trails and rendering
+
+				// For trail storage
+				glm::vec3 glPos(p.x, p.y, p.z);
+				uavTrails[i].insert(uavTrails[i].begin(), glPos);
+
+				// Remove old trail points exceeding TRAIL_LENGTH
+				if (uavTrails[i].size() > TRAIL_LENGTH) {
+                    uavTrails[i].pop_back();
+                }
+
 				if (!uavs[i]->hasCompletedOrbit())
 				{
 					allFinished = false;
@@ -555,6 +572,77 @@ int main( void )
 		}
 
 		/////// END OF NEW MATRIX //////////
+
+
+		/////// Draw Light Trails ////////
+		glUseProgram(programID);
+
+		// Use Identity Matrix for Model (World Space)
+        glm::mat4 Identity = glm::mat4(1.0);
+		// Reusing MVP variable
+        MVP = ProjectionMatrix * ViewMatrix * Identity;
+        glUniformMatrix4fv(
+			MatrixID, 		// Matrix ID
+			1, 				// Number of matrices
+			GL_FALSE, 		// Transpose
+			&MVP[0][0]);	// Pointer to first element
+
+		// Set color of trails
+		glUniform1i(uUseSolid, GL_TRUE);
+		glUniform3f(uSolidColor, 1.0f, 1.0f, 1.0f); // White trails
+        glUniform1f(uSolidAlpha, 1.0f);
+
+		// Flatter into 2D vector
+		std::vector<glm::vec3> allTrailVerts;
+
+		// Record first and end for each strip
+		std::vector<int> stripCounts; 
+        std::vector<int> stripFirsts;
+        int currentStartIndex = 0;
+
+		// Create line segments for each trail
+		for(int i=0; i<numberUAVs; i++) {
+            if(uavTrails[i].size() < 2) continue; // Need 2 points to make a line
+
+            // Copy points to the flat buffer
+            allTrailVerts.insert(allTrailVerts.end(), uavTrails[i].begin(), uavTrails[i].end());
+            
+            // Record the draw command info
+            stripFirsts.push_back(currentStartIndex);
+            stripCounts.push_back(uavTrails[i].size());
+            currentStartIndex += uavTrails[i].size();
+        }
+
+		// Upload to VBO
+		if (allTrailVerts.size() > 0) {
+            // Send to GPU (Dynamic Draw because it changes every frame)
+            glEnableVertexAttribArray(0);
+            glBindBuffer(GL_ARRAY_BUFFER, trailVBO);
+            glBufferData(
+				GL_ARRAY_BUFFER, 							// Target
+				allTrailVerts.size() * sizeof(glm::vec3), 	// Size in bytes
+				&allTrailVerts[0], 							// Pointer to data
+				GL_DYNAMIC_DRAW);							// Usage
+            glVertexAttribPointer(
+				0, 			// layout match to shader
+				3, 			// size
+				GL_FLOAT, 	// type
+				GL_FALSE, 	// normalized
+				0, 			// stride
+				(void*)0);	// array buffer offset
+
+            // Disable UVs and Normals for lines (not needed)
+            glDisableVertexAttribArray(1);
+            glDisableVertexAttribArray(2);
+
+            // Draw each line strip
+            for(size_t k=0; k<stripCounts.size(); k++) {
+                glDrawArrays(GL_LINE_STRIP, stripFirsts[k], stripCounts[k]);
+            }
+        }
+
+		/////// END OF LIGHT TRAILS //////////
+
 
 		/////// Draw Semi-Transparent Target Sphere ////////
 		// Position: (0, 0, 50) in Z-up coordinate system
