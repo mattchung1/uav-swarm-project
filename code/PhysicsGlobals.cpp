@@ -1,7 +1,11 @@
 /*
-Physics Globals for Collision detection
-*/
+Author: Matt Chung
+Class: ECE6122
+Last Date Modified: November 29, 2025
 
+Description:
+Global physics parameters and functions for UAV simulation.
+*/
 
 #include "PhysicsGlobals.h"
 #include "ECE_UAV.h"
