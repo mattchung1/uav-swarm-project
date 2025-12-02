@@ -157,25 +157,22 @@ int main( void )
 		return -1;
 	}
 
-	GLuint texture1 = loadDDS("assets/textures/uvmap.DDS");
+	GLuint texture1 = loadTextureWithStb("assets/textures/redtexture.jpg");
 	if (!texture1) {
-		texture1 = loadTextureWithStb("assets/textures/uvmap.DDS");
+		texture1 = loadDDS("assets/textures/redtexture.DDS");
 	}
 	if (!texture1) {
-		texture1 = loadTextureWithStb("assets/textures/uvmap.jpg");
-	}
-	if (!texture1) {
-		fprintf(stderr, "Failed to load uvmap; falling back to txtr01/cat for group 1.\n");
+		fprintf(stderr, "Failed to load redtexture; falling back to txtr01/cat for group 1.\n");
 		texture1 = texture0; // fallback to texture0 which has valid content
 	}
 
-	GLuint texture2 = loadTextureWithStb("assets/textures/txtr02.jpg");
+	GLuint texture2 = loadTextureWithStb("assets/textures/whitemarble.jpg");
 	if (!texture2) {
-		// Try a DDS or fallback to texture0/cat
-		texture2 = loadDDS("assets/textures/txtr02.DDS");
+		// Try a DDS or fallback to texturuue0/cat
+		texture2 = loadDDS("assets/textures/whitemarble.DDS");
 	}
 	if (!texture2) {
-		fprintf(stderr, "Failed to load txtr02.jpg; falling back to txtr01/cat for group 2.\n");
+		fprintf(stderr, "Failed to load whitemarble.jpg; falling back to txtr01/cat for group 2.\n");
 		texture2 = texture0;
 	}
 

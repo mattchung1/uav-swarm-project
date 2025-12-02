@@ -1,5 +1,15 @@
+/*
+Author: Matt Chung
+Class: ECE6122
+Last Date Modified: November 29, 2025
+
+Description:
+Simple 3D vector class for basic vector operations.
+*/
+
 #pragma once
 #include <cmath>
+
 
 class Vec3 
 {

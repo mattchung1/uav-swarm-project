@@ -1,5 +1,10 @@
-/* 
-PhysicsGlobals.h
+/*
+Author: Matt Chung
+Class: ECE6122
+Last Date Modified: November 29, 2025
+
+Description:
+Global physics parameters and functions for UAV simulation.
 */
 
 #pragma once

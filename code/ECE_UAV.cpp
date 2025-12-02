@@ -1,6 +1,10 @@
 /*
-CPP file for ECE_UAV class. Defines functions used for the ECE_UAV class
+Author: Aaron Huang, Dulani Wijayarathne, Matt Chung
+Class: ECE6122
+Last Date Modified: November 29, 2025
 
+Description:
+ECE_UAV class implementation for UAV simulation, including physics updates and control.
 
 */
 

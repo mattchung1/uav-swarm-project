@@ -1,5 +1,5 @@
 /*
-Author: Person 3
+Author: Dulani Wijayarathne
 Class: ECE6122
 Last Date Modified: November 29, 2025
 
