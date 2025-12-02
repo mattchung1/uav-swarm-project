@@ -812,8 +812,12 @@ int main( void )
 	// Stop all UAV threads
 	for (int i = 0; i < numberUAVs; ++i) {
 		uavs[i]->stop();
-		delete uavs[i];
 	}
+	// Delete the memory 
+    for (int i = 0; i < numberUAVs; ++i) {
+        delete uavs[i];
+    }
+	uavs.clear();
 
 	// Cleanup VBO and shader
 	// Cleanup buffers for all model groups
