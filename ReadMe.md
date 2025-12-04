@@ -5,6 +5,13 @@ This project simulates a swarm of 15 autonomous Unmanned Aerial Vehicles (UAVs) 
 
 The core of the simulation relies on a **PID Controller** to navigate drones from a ground formation to a high-altitude target, where they orbit a central sphere before returning to their starting positions.
 
+<p align="center">
+  <a href="https://youtu.be/SgWK-Aberh4">
+    <img src="https://img.youtube.com/vi/SgWK-Aberh4/0.jpg" alt="uav demo" />
+  </a>
+</p>
+
+
 ## Key Features
 
 ### Physics & Control
