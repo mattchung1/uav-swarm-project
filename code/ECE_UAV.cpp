@@ -7,6 +7,7 @@ Description:
 ECE_UAV class implementation for UAV simulation, including physics updates and control.
 
 */
+#define _USE_MATH_DEFINES
 
 #include <iostream>
 #include <algorithm>
@@ -15,6 +16,14 @@ ECE_UAV class implementation for UAV simulation, including physics updates and c
 #include <cmath>
 #include <random>
 #include "ECE_UAV.h"
+
+
+// Helper to replace std::clamp in C++14
+template <typename T>
+const T& my_clamp(const T& v, const T& lo, const T& hi) {
+    return (v < lo) ? lo : (hi < v ? hi : v);
+}
+
 
 /*
 **************************
@@ -312,7 +321,7 @@ Vec3 ECE_UAV::calculateStateBasedForce(double deltaTime)
             double availableForce = std::max(0.0, maxForce - gravityCompensation);
 
             // Taper the target speed as we approach the sphere to avoid overshoot
-            double normalizedDistance = std::clamp(distanceFromSurface / sphereRadius, 0.0, 1.0);
+            double normalizedDistance = my_clamp(distanceFromSurface / sphereRadius, 0.0, 1.0);
             double targetSpeed = normalizedDistance * maxAscentSpeed;
 
             // Directional control: accelerate or brake along desiredDirection
@@ -320,7 +329,7 @@ Vec3 ECE_UAV::calculateStateBasedForce(double deltaTime)
             double controlRatio = 0.0;
             if (maxAscentSpeed > 0.0)
             {
-                controlRatio = std::clamp(speedError / maxAscentSpeed, -1.0, 1.0);
+                controlRatio = my_clamp(speedError / maxAscentSpeed, -1.0, 1.0);
             }
             thrust += desiredDirection * (availableForce * controlRatio);
 
@@ -330,7 +339,7 @@ Vec3 ECE_UAV::calculateStateBasedForce(double deltaTime)
             if (lateralSpeed > 0.05 && availableForce > 0.0)
             {
                 Vec3 lateralDir = lateralVelocity.normalized();
-                double lateralRatio = std::clamp(lateralSpeed / maxAscentSpeed, 0.0, 1.0);
+                double lateralRatio = my_clamp(lateralSpeed / maxAscentSpeed, 0.0, 1.0);
                 thrust += lateralDir * (-availableForce * 0.6 * lateralRatio);
             }
 
@@ -437,7 +446,7 @@ Vec3 ECE_UAV::calculateStateBasedForce(double deltaTime)
 
             // PID on radial error with additional damping on radial velocity
             double radialControl = pidX.calculate(0.0, radialError, deltaTime) - 2.0 * radialSpeed;
-            radialControl = std::clamp(radialControl, -availableForce, availableForce);
+            radialControl = my_clamp(radialControl, -availableForce, availableForce);
             Vec3 radialCorrectionForce = radialDirection * radialControl;
 
             // Tangential direction (project random vector onto tangent plane)
@@ -473,16 +482,16 @@ Vec3 ECE_UAV::calculateStateBasedForce(double deltaTime)
             double tangentialRatio = 0.0;
             if (tangentialSpeed < minOrbitSpeed)
             {
-                tangentialRatio = std::clamp((minOrbitSpeed - tangentialSpeed) / minOrbitSpeed, 0.0, 1.0);
+                tangentialRatio = my_clamp((minOrbitSpeed - tangentialSpeed) / minOrbitSpeed, 0.0, 1.0);
             }
             else if (tangentialSpeed > maxOrbitSpeed)
             {
-                tangentialRatio = -std::clamp((tangentialSpeed - maxOrbitSpeed) / maxOrbitSpeed, 0.0, 1.0);
+                tangentialRatio = -my_clamp((tangentialSpeed - maxOrbitSpeed) / maxOrbitSpeed, 0.0, 1.0);
             }
             else
             {
                 double midBandError = (targetOrbitSpeed - tangentialSpeed) / targetOrbitSpeed;
-                tangentialRatio = std::clamp(midBandError, -0.5, 0.5);
+                tangentialRatio = my_clamp(midBandError, -0.5, 0.5);
             }
 
             Vec3 tangentControlDirection = tangentDirection;
