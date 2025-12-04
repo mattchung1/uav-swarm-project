@@ -2,7 +2,8 @@
 cmake_minimum_required(VERSION 3.16)
 project(FinalProject)
 
-set(CMAKE_CXX_STANDARD 17)
+#set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD 14)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 # ---- Find Packages ----
@@ -56,11 +57,19 @@ add_custom_command(TARGET FinalProject POST_BUILD
 
 # Link against the libraries provided by external/
 # (check external/CMakeLists.txt if these target names differ)
+
+find_package(OpenGL REQUIRED)
+
 target_link_libraries(FinalProject PRIVATE
     glfw
     GLEW_1130
     assimp
+    ${OPENGL_LIBRARIES}
 )
+
+# Tell code we are using static GLEW
+target_compile_definitions(FinalProject PRIVATE GLEW_STATIC)
+
 
 # Only FinalProject goes into build/bin
 set_target_properties(FinalProject PROPERTIES
