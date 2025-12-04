@@ -37,7 +37,6 @@ The simulation includes a chase-camera system allowing the user to inspect indiv
 1.  **Idle Phase:** Drones initialize on the yard lines of the football field (0, 25, 50, -25, -50).
 2.  **Launch Phase:** After 5 seconds, the swarm launches simultaneously toward a central convergence point (0, 0, 50).
 3.  **Orbit Phase:** Drones enter a random orbit pattern around a 10m radius sphere, maintaining velocities between 2m/s and 10m/s using PID corrections.
-4.  **Return Phase:** Upon completing the required flight duration, drones return to their original coordinates.
 
 ## Build Instructions
 
