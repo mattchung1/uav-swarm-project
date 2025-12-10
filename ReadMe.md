@@ -11,6 +11,7 @@ The core of the simulation relies on a **PID Controller** to navigate drones fro
   </a>
 </p>
 
+> *Click the image above to watch the demonstration video.*
 
 ## Key Features
 
